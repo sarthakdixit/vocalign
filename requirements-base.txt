@@ -11,10 +11,23 @@ pyyaml>=6.0
 num2words>=0.5
 resemblyzer>=0.1.4
 utmos-pytorch>=0.1.0
-gradio>=4.0
+gradio<5
 pywebview>=4.0
 
 # resemblyzer -> webrtcvad does `import pkg_resources` (never updated for its removal -
 # deprecated in setuptools 67.5.0, fully removed in 82.0.0). Pin below that line; torch
 # itself requires setuptools>=77.0.3, so this just picks the compatible range between them.
 setuptools<82
+
+# Confirmed 2026-10-06 on a real run: gradio 5/6's own gradio-client/hf-gradio
+# sub-packages require huggingface-hub>=1.16.0, which directly conflicts with
+# transformers's own huggingface-hub<1.0 ceiling (transformers/tokenizers are pulled
+# in transitively by utmos-pytorch's wav2vec2-based model, not a direct dependency
+# here). gradio<5 avoids that collision entirely - no version split needed.
+#
+# Separately: gradio 4.44.1's Jinja2-based page rendering breaks under starlette>=1.0
+# with a real `TypeError: unhashable type: 'dict'` in Jinja2's template cache lookup -
+# a transitive-starlette compatibility gap gradio 4.44.1 itself doesn't pin around
+# (its own metadata only requires fastapi<1.0, with no starlette constraint at all).
+starlette<1.0
+huggingface-hub<1.0,>=0.34.0
