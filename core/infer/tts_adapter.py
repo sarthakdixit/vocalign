@@ -13,6 +13,8 @@ settled training-scope decision) is exactly what this library supports, not a ha
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 
 @dataclass(frozen=True)
 class TtsCheckpoints:
@@ -84,9 +86,28 @@ def load_tts(checkpoints: TtsCheckpoints, tts_class=None, config_class=None):
     return tts_class(config)
 
 
-def synthesize(tts_instance, request: SynthesisRequest) -> tuple[int, "numpy.ndarray"]:
+def synthesize(tts_instance, request: SynthesisRequest) -> tuple[int, np.ndarray]:
     """tts_instance is whatever load_tts() produced (or a test fake with the same
     generator-based .run() contract). run() is confirmed to be a generator - the real
-    library's own api_v2.py also does next(tts_pipeline.run(req)) for a single result."""
+    library's own api_v2.py also does next(tts_pipeline.run(req)) for a single result.
+
+    Normalizes the raw audio to float32 before returning: confirmed via a real
+    `librosa...ParameterError: Audio data must be floating-point` on a real run that
+    run() yields raw integer PCM (api_v2.py's own packing code treats it as such too -
+    an AAC path pipes it to ffmpeg as raw `s16le`), which Resemblyzer's SECS scoring
+    rejects when given an array directly rather than loading from a file. Every
+    downstream consumer here (ranking/SECS/UTMOS, stitching, export) expects float32
+    in [-1, 1], matching the rest of this codebase's convention, so this normalizes
+    once at the source rather than in each consumer."""
     generator = tts_instance.run(build_run_inputs(request))
-    return next(generator)
+    sample_rate, audio = next(generator)
+    return sample_rate, _to_float32(audio)
+
+
+def _to_float32(audio: np.ndarray) -> np.ndarray:
+    if np.issubdtype(audio.dtype, np.floating):
+        return audio.astype(np.float32)
+    # Scales by the dtype's own range rather than a hardcoded 32768, so this is
+    # correct regardless of the integer PCM width actually in use.
+    info = np.iinfo(audio.dtype)
+    return audio.astype(np.float32) / max(abs(info.min), info.max)

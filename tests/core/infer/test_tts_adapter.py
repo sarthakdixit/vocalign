@@ -94,14 +94,34 @@ def test_load_tts_constructs_config_then_tts_with_injected_classes():
     assert tts.config.configs == tts_adapter.build_tts_config_dict(checkpoints)
 
 
-def test_synthesize_returns_first_yielded_value_from_run():
-    audio = np.array([1, 2, 3], dtype=np.int16)
-    fake_tts = _FakeTts(sr=32000, audio=audio)
+def test_synthesize_returns_the_sample_rate_yielded_from_run():
+    fake_tts = _FakeTts(sr=32000)
 
-    sr, returned_audio = tts_adapter.synthesize(fake_tts, _request())
+    sr, _ = tts_adapter.synthesize(fake_tts, _request())
 
     assert sr == 32000
-    np.testing.assert_array_equal(returned_audio, audio)
+
+
+def test_synthesize_normalizes_int16_audio_to_float32():
+    # Confirmed via a real run: run() yields raw int16 PCM, which Resemblyzer's SECS
+    # scoring rejects outright when given an array directly (not loaded from a file).
+    audio = np.array([0, 16384, -32768, 32767], dtype=np.int16)
+    fake_tts = _FakeTts(audio=audio)
+
+    _, returned_audio = tts_adapter.synthesize(fake_tts, _request())
+
+    assert returned_audio.dtype == np.float32
+    np.testing.assert_allclose(returned_audio, [0.0, 0.5, -1.0, 32767 / 32768], atol=1e-6)
+
+
+def test_synthesize_passes_through_already_float_audio_unchanged():
+    audio = np.array([0.1, -0.5, 0.9], dtype=np.float32)
+    fake_tts = _FakeTts(audio=audio)
+
+    _, returned_audio = tts_adapter.synthesize(fake_tts, _request())
+
+    assert returned_audio.dtype == np.float32
+    np.testing.assert_allclose(returned_audio, audio)
 
 
 def test_synthesize_passes_core_fields_to_run():
