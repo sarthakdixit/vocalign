@@ -133,6 +133,21 @@ def test_build_s2_config_sets_gpu_numbers(tmp_path):
     assert config["train"]["gpu_numbers"] == "0"
 
 
+def test_build_s2_config_grad_ckpt_defaults_to_true(tmp_path):
+    # On by default: confirmed with a real CUDA OOM mid-epoch that this GPU needs it.
+    config = adapter.build_s2_config(_paths(tmp_path), _job(tmp_path), template=FAKE_S2_TEMPLATE)
+
+    assert config["train"]["grad_ckpt"] is True
+
+
+def test_build_s2_config_grad_ckpt_can_be_disabled(tmp_path):
+    config = adapter.build_s2_config(
+        _paths(tmp_path), _job(tmp_path, grad_ckpt=False), template=FAKE_S2_TEMPLATE
+    )
+
+    assert config["train"]["grad_ckpt"] is False
+
+
 def test_build_s2_config_preserves_template_fields_it_does_not_override(tmp_path):
     # filter_length specifically - this is the exact field the real run crashed on.
     config = adapter.build_s2_config(_paths(tmp_path), _job(tmp_path), template=FAKE_S2_TEMPLATE)
@@ -287,6 +302,19 @@ def test_run_sovits_stage_creates_save_weight_dir(tmp_path, fake_popen_factory):
     adapter.run_sovits_stage(paths, job, popen_factory=factory)
 
     assert (job.experiment_dir / "s2_weights").is_dir()
+
+
+def test_run_sovits_stage_sets_expandable_segments_alloc_conf(tmp_path, fake_popen_factory):
+    # Suggested directly by a real CUDA OOM's own error message (fragmentation, not
+    # just raw usage) - cheap to try given how tight this stage's VRAM budget is.
+    factory = fake_popen_factory(lines=[], returncode=0)
+    paths = _paths(tmp_path)
+    job = _job(tmp_path)
+    _write_s2_template_file(paths, job.version)
+
+    adapter.run_sovits_stage(paths, job, popen_factory=factory)
+
+    assert factory.calls[0]["env"]["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
 
 
 def test_run_sovits_stage_uses_lora_script_for_v3_and_v4(tmp_path, fake_popen_factory):

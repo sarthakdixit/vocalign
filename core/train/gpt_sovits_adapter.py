@@ -117,6 +117,7 @@ class FineTuneJob:
     lora_rank: int | None = None
     batch_size: int = 1
     use_fp16: bool = True
+    grad_ckpt: bool = True
 
 
 def s2_template_path(repo_root, version: str) -> Path:
@@ -168,7 +169,9 @@ def build_s2_config(paths: GptSoVitsPaths, job: FineTuneJob, template: dict | No
     config["train"]["if_save_latest"] = True
     config["train"]["if_save_every_weights"] = True
     config["train"]["save_every_epoch"] = max(1, job.sovits_epochs // 2)
-    config["train"]["grad_ckpt"] = False
+    # On by default: this GPU is tight enough (confirmed with a real CUDA OOM mid-epoch)
+    # that trading compute time for VRAM is worth it unconditionally on this hardware.
+    config["train"]["grad_ckpt"] = job.grad_ckpt
     # s2_train.py reads this at module import time, before anything else runs, with no
     # fallback - confirmed the hard way (AttributeError) on a real run. "0" = single GPU,
     # dash-separated for multi-GPU (the script does gpu_numbers.replace("-", ",")).
@@ -225,10 +228,13 @@ def run_sovits_stage(
     write_json_config(config, config_path)
     script = "GPT_SoVITS/s2_train_v3_lora.py" if job.version in {"v3", "v4"} else "GPT_SoVITS/s2_train.py"
     command = [paths.python_executable, "-s", script, "--config", str(config_path)]
+    # Suggested directly by a real CUDA OOM's own error message, to reduce fragmentation
+    # rather than raw usage - cheap to try given how tight this stage's VRAM budget is.
+    env = build_env(paths, extra={"PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True"})
     return run_stage(
         command,
         cwd=str(paths.repo_root),
-        env=build_env(paths),
+        env=env,
         on_progress=on_progress,
         popen_factory=popen_factory,
         cancel_check=cancel_check,
