@@ -9,5 +9,6 @@ htmlcov/
 /projects/
 /models/
 /logs/
+/vendor/
 
 .DS_Store
