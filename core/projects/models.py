@@ -16,11 +16,16 @@ class ProjectState(Enum):
 
 
 VALID_TRANSITIONS: dict[ProjectState, frozenset] = {
-    ProjectState.CREATED: frozenset({ProjectState.PREPROCESSING}),
+    # Every state can move to ERROR - a failure can happen before an operation's own
+    # first transition even lands (e.g. disk/permission issues right after project
+    # creation), not only while PREPROCESSING/TRAINING are nominally in progress. A
+    # caller that always tries to mark a project ERROR on any exception, regardless of
+    # which state it started from, shouldn't have to special-case which ones allow it.
+    ProjectState.CREATED: frozenset({ProjectState.PREPROCESSING, ProjectState.ERROR}),
     ProjectState.PREPROCESSING: frozenset({ProjectState.PREPROCESSED, ProjectState.ERROR}),
-    ProjectState.PREPROCESSED: frozenset({ProjectState.PREPROCESSING, ProjectState.TRAINING}),
+    ProjectState.PREPROCESSED: frozenset({ProjectState.PREPROCESSING, ProjectState.TRAINING, ProjectState.ERROR}),
     ProjectState.TRAINING: frozenset({ProjectState.TRAINED, ProjectState.ERROR}),
-    ProjectState.TRAINED: frozenset({ProjectState.TRAINING}),
+    ProjectState.TRAINED: frozenset({ProjectState.TRAINING, ProjectState.ERROR}),
     ProjectState.ERROR: frozenset({ProjectState.PREPROCESSING, ProjectState.TRAINING}),
 }
 

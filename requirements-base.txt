@@ -11,6 +11,8 @@ pyyaml>=6.0
 num2words>=0.5
 resemblyzer>=0.1.4
 utmos-pytorch>=0.1.0
+gradio>=4.0
+pywebview>=4.0
 
 # resemblyzer -> webrtcvad does `import pkg_resources` (never updated for its removal -
 # deprecated in setuptools 67.5.0, fully removed in 82.0.0). Pin below that line; torch

@@ -89,6 +89,20 @@ class GptSoVitsPaths:
     pretrained_s2_d: Path | None = None
 
 
+def find_latest_gpt_checkpoint(weights_dir: Path) -> Path | None:
+    """The fine-tuned GPT checkpoint `run_gpt_stage` produces under
+    `experiment_dir/s1_weights/` (half_weights_save_dir - see build_s1_config). Picks
+    the most recently modified .ckpt if several exist (e.g. from if_save_every_weights).
+    Returns None rather than raising if the directory doesn't exist or is empty yet -
+    callers (a zero_shot_only-tier project never trains, so this is a real, valid case,
+    not an error) decide what that means for them."""
+    weights_dir = Path(weights_dir)
+    if not weights_dir.is_dir():
+        return None
+    checkpoints = sorted(weights_dir.glob("*.ckpt"), key=lambda p: p.stat().st_mtime)
+    return checkpoints[-1] if checkpoints else None
+
+
 def default_paths(repo_root: Path, python_executable: str, version: str) -> GptSoVitsPaths:
     if version not in PRETRAINED_S2G_BY_VERSION:
         raise ValueError(f"Unknown GPT-SoVITS version {version!r}")

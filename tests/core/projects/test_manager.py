@@ -94,6 +94,38 @@ def test_transition_project_does_not_persist_on_invalid_transition(tmp_path):
     assert manager.get_project(tmp_path, "p1").state == ProjectState.CREATED
 
 
+def test_update_config_merges_new_keys_without_dropping_existing_ones(tmp_path):
+    manager.create_project(tmp_path, "x", id_factory=lambda: "p1", config={"a": 1})
+
+    updated = manager.update_config(tmp_path, "p1", {"b": 2})
+
+    assert updated.config == {"a": 1, "b": 2}
+    assert manager.get_project(tmp_path, "p1").config == {"a": 1, "b": 2}
+
+
+def test_update_config_overwrites_an_existing_key(tmp_path):
+    manager.create_project(tmp_path, "x", id_factory=lambda: "p1", config={"a": 1})
+
+    updated = manager.update_config(tmp_path, "p1", {"a": 99})
+
+    assert updated.config == {"a": 99}
+
+
+def test_update_config_raises_for_unknown_id(tmp_path):
+    with pytest.raises(ProjectNotFoundError):
+        manager.update_config(tmp_path, "nope", {"a": 1})
+
+
+def test_update_config_bumps_updated_at(tmp_path):
+    manager.create_project(tmp_path, "x", id_factory=lambda: "p1", now=_fixed_now)
+
+    updated = manager.update_config(
+        tmp_path, "p1", {"a": 1}, now=lambda: datetime(2026, 1, 2, tzinfo=timezone.utc)
+    )
+
+    assert updated.updated_at != updated.created_at
+
+
 def test_delete_project_removes_it_from_listing(tmp_path):
     manager.create_project(tmp_path, "x", id_factory=lambda: "p1")
 

@@ -45,3 +45,13 @@ def test_ensure_app_dirs_creates_missing_parents(tmp_path):
     created = config.ensure_app_dirs(nested_root)
 
     assert created["logs"].is_dir()
+
+
+def test_resolve_vendor_dir_defaults_to_repo_root_subpath(monkeypatch):
+    monkeypatch.delenv("CLONE_VOICE_VENDOR_DIR", raising=False)
+    assert config.resolve_vendor_dir() == config.REPO_ROOT / "vendor" / "GPT-SoVITS"
+
+
+def test_resolve_vendor_dir_honors_env_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("CLONE_VOICE_VENDOR_DIR", str(tmp_path))
+    assert config.resolve_vendor_dir() == tmp_path.resolve()

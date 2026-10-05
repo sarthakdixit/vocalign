@@ -23,7 +23,8 @@ def fake_popen_factory():
     """Factory fixture: fake_popen_factory(lines=[...], returncode=0) returns a
     popen_factory-compatible callable. `.calls` records every invocation's
     command/cwd; `.last_process` exposes the most recently created FakeProcess
-    (e.g. to assert .terminated after a cancel)."""
+    (e.g. to assert .terminated after a cancel). Shared project-wide (not just
+    core/train/) since it's just a generic subprocess.Popen stand-in."""
 
     def _make(lines=(), returncode=0):
         calls = []

@@ -49,13 +49,16 @@ def test_every_state_has_an_entry_in_the_transition_table():
 
 VALID_CASES = [
     (ProjectState.CREATED, ProjectState.PREPROCESSING),
+    (ProjectState.CREATED, ProjectState.ERROR),
     (ProjectState.PREPROCESSING, ProjectState.PREPROCESSED),
     (ProjectState.PREPROCESSING, ProjectState.ERROR),
     (ProjectState.PREPROCESSED, ProjectState.PREPROCESSING),
     (ProjectState.PREPROCESSED, ProjectState.TRAINING),
+    (ProjectState.PREPROCESSED, ProjectState.ERROR),
     (ProjectState.TRAINING, ProjectState.TRAINED),
     (ProjectState.TRAINING, ProjectState.ERROR),
     (ProjectState.TRAINED, ProjectState.TRAINING),
+    (ProjectState.TRAINED, ProjectState.ERROR),
     (ProjectState.ERROR, ProjectState.PREPROCESSING),
     (ProjectState.ERROR, ProjectState.TRAINING),
 ]
@@ -72,13 +75,10 @@ def test_valid_transitions_are_allowed(start, target):
 
 INVALID_CASES = [
     (ProjectState.CREATED, ProjectState.TRAINED),
-    (ProjectState.CREATED, ProjectState.ERROR),
     (ProjectState.CREATED, ProjectState.TRAINING),
     (ProjectState.PREPROCESSED, ProjectState.TRAINED),
-    (ProjectState.PREPROCESSED, ProjectState.ERROR),
     (ProjectState.TRAINING, ProjectState.PREPROCESSED),
     (ProjectState.TRAINING, ProjectState.CREATED),
-    (ProjectState.TRAINED, ProjectState.ERROR),
     (ProjectState.TRAINED, ProjectState.CREATED),
     (ProjectState.TRAINED, ProjectState.PREPROCESSED),
     (ProjectState.ERROR, ProjectState.TRAINED),

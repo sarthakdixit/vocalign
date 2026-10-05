@@ -37,18 +37,14 @@ from core.infer.ranking import default_secs_fn, default_utmos_fn  # noqa: E402
 from core.infer.similarity import compute_embedding, reference_centroid  # noqa: E402
 from core.infer.tts_adapter import TtsCheckpoints, load_tts  # noqa: E402
 from core.train.data_prep import default_bert_dir, default_cnhubert_dir  # noqa: E402
-from core.train.gpt_sovits_adapter import chdir_to_repo_root, default_paths, ensure_on_sys_path  # noqa: E402
+from core.train.gpt_sovits_adapter import (  # noqa: E402
+    chdir_to_repo_root,
+    default_paths,
+    ensure_on_sys_path,
+    find_latest_gpt_checkpoint,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-def _find_latest_checkpoint(weights_dir: Path) -> Path:
-    checkpoints = sorted(weights_dir.glob("*.ckpt"), key=lambda p: p.stat().st_mtime)
-    if not checkpoints:
-        raise FileNotFoundError(
-            f"No .ckpt files found in {weights_dir} - run scripts/smoke_test_batch3.py first"
-        )
-    return checkpoints[-1]
 
 
 def main() -> int:
@@ -76,7 +72,14 @@ def main() -> int:
     experiment_dir = args.experiment_dir or (work_dir / "experiment")
 
     print("[smoke_test] 1/6 Locating the fine-tuned GPT checkpoint from Batch 3")
-    checkpoint_path = _find_latest_checkpoint(experiment_dir / "s1_weights")
+    checkpoint_path = find_latest_gpt_checkpoint(experiment_dir / "s1_weights")
+    if checkpoint_path is None:
+        print(
+            f"[smoke_test] No .ckpt files found under {experiment_dir / 's1_weights'} - "
+            "run scripts/smoke_test_batch3.py first",
+            file=sys.stderr,
+        )
+        return 1
     print(f"[smoke_test]     using {checkpoint_path}")
 
     print("[smoke_test] 2/6 Selecting a GPT-SoVITS-valid (3-10s) prompt clip from Batch 3's chunks")

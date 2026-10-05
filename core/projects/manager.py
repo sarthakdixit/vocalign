@@ -42,6 +42,14 @@ def delete_project(projects_root, project_id: str) -> None:
     storage.delete_project_dir(projects_root, project_id)
 
 
+def update_config(projects_root, project_id: str, updates: dict, *, now=None) -> Project:
+    project = storage.load_project(projects_root, project_id)
+    merged = {**project.config, **updates}
+    updated = dataclasses.replace(project, config=merged, updated_at=now_iso(now))
+    storage.save_project(projects_root, updated)
+    return updated
+
+
 def transition_project(
     projects_root,
     project_id: str,

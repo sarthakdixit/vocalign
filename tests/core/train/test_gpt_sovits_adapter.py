@@ -479,6 +479,42 @@ def test_run_sovits_stage_uses_full_script_for_v2_family(tmp_path, fake_popen_fa
     assert "GPT_SoVITS/s2_train.py" in factory.calls[0]["command"]
 
 
+# --- find_latest_gpt_checkpoint (shared by scripts/smoke_test_batch4.py and the GUI's
+# training pipeline - locates run_gpt_stage's output for a later inference load) ---
+
+
+def test_find_latest_gpt_checkpoint_returns_none_when_dir_does_not_exist(tmp_path):
+    assert adapter.find_latest_gpt_checkpoint(tmp_path / "does_not_exist") is None
+
+
+def test_find_latest_gpt_checkpoint_returns_none_when_dir_is_empty(tmp_path):
+    weights_dir = tmp_path / "s1_weights"
+    weights_dir.mkdir()
+
+    assert adapter.find_latest_gpt_checkpoint(weights_dir) is None
+
+
+def test_find_latest_gpt_checkpoint_ignores_non_ckpt_files(tmp_path):
+    weights_dir = tmp_path / "s1_weights"
+    weights_dir.mkdir()
+    (weights_dir / "notes.txt").write_text("not a checkpoint")
+
+    assert adapter.find_latest_gpt_checkpoint(weights_dir) is None
+
+
+def test_find_latest_gpt_checkpoint_picks_the_most_recently_modified_one(tmp_path):
+    weights_dir = tmp_path / "s1_weights"
+    weights_dir.mkdir()
+    older = weights_dir / "experiment-e2.ckpt"
+    newer = weights_dir / "experiment-e4.ckpt"
+    older.write_bytes(b"older")
+    newer.write_bytes(b"newer")
+    older_time = newer.stat().st_mtime - 100
+    os.utime(older, (older_time, older_time))
+
+    assert adapter.find_latest_gpt_checkpoint(weights_dir) == newer
+
+
 # --- default_paths (pretrained checkpoint locations) ---
 
 
