@@ -54,15 +54,26 @@ def test_export_audio_creates_missing_parent_directories(tmp_path):
 
 
 def test_export_audio_falls_back_to_plain_writer_if_comment_path_fails(tmp_path, monkeypatch):
-    def broken_soundfile(*args, **kwargs):
-        raise RuntimeError("simulated SoundFile failure")
+    # soundfile.write() is itself implemented in terms of SoundFile(), so a mock that
+    # always raises would break the fallback path too (nothing to fall back to). Fail
+    # only the first call (the comment-tagging attempt) and let the fallback's call
+    # through to the real SoundFile, so we can verify it actually recovers.
+    real_soundfile = sf.SoundFile
+    call_count = {"n": 0}
 
-    monkeypatch.setattr(export_mod.sf, "SoundFile", broken_soundfile)
+    def flaky_soundfile(*args, **kwargs):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise RuntimeError("simulated SoundFile failure")
+        return real_soundfile(*args, **kwargs)
+
+    monkeypatch.setattr(export_mod.sf, "SoundFile", flaky_soundfile)
 
     audio_path, _ = export_mod.export_audio(
         tmp_path / "out.wav", np.zeros(50, dtype=np.float32), 16000, export_mod.GenerationMetadata(text="x")
     )
 
+    assert call_count["n"] == 2  # primary attempt, then the fallback
     assert audio_path.exists()
     read_back, sr = sf.read(str(audio_path))
     assert sr == 16000
