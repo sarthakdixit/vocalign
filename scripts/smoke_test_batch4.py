@@ -7,10 +7,16 @@ normalize -> chunk -> synthesize candidates -> Whisper-WER gate -> SECS+UTMOS
 rank -> stitch -> export).
 
 Needs scripts/smoke_test_batch3.py to have already produced a fine-tuned GPT
-checkpoint under <experiment-dir>/s1_weights/*.ckpt.
+checkpoint under <experiment-dir>/s1_weights/*.ckpt and a dataset.list under
+<work-dir>/dataset.list. The audio_path argument is used only to build the SECS
+reference-speaker embedding (Resemblyzer handles arbitrary-length audio fine for
+that); GPT-SoVITS's own "prompt audio" clip (ref_audio_path/prompt_text) is instead
+selected automatically from Batch 3's own training chunks, since TTS_infer_pack
+enforces a hard 3-10 second range there and rejects a full-length reference clip
+outright (confirmed via a real OSError - see DESIGN.md S13).
 
 Usage:
-  python scripts/smoke_test_batch4.py path/to/clip.wav "reference text" "text to synthesize" [--version v2Pro]
+  python scripts/smoke_test_batch4.py path/to/clip.wav "text to synthesize" [--version v2Pro]
 """
 
 import argparse
@@ -25,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.audio.io import load_and_transcode  # noqa: E402
 from core.infer.generate import generate_and_export  # noqa: E402
+from core.infer.prompt_selection import load_candidates_from_dataset_list, select_prompt_clip  # noqa: E402
 from core.infer.ranking import default_secs_fn, default_utmos_fn  # noqa: E402
 from core.infer.similarity import compute_embedding, reference_centroid  # noqa: E402
 from core.infer.tts_adapter import TtsCheckpoints, load_tts  # noqa: E402
@@ -46,7 +53,6 @@ def _find_latest_checkpoint(weights_dir: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("audio_path", type=Path)
-    parser.add_argument("reference_text")
     parser.add_argument("target_text")
     parser.add_argument("--version", default="v2Pro")
     parser.add_argument("--vendor-dir", type=Path, default=REPO_ROOT / "vendor" / "GPT-SoVITS")
@@ -63,11 +69,16 @@ def main() -> int:
     work_dir.mkdir(parents=True, exist_ok=True)
     experiment_dir = args.experiment_dir or (work_dir / "experiment")
 
-    print("[smoke_test] 1/5 Locating the fine-tuned GPT checkpoint from Batch 3")
+    print("[smoke_test] 1/6 Locating the fine-tuned GPT checkpoint from Batch 3")
     checkpoint_path = _find_latest_checkpoint(experiment_dir / "s1_weights")
     print(f"[smoke_test]     using {checkpoint_path}")
 
-    print("[smoke_test] 2/5 Loading TTS pipeline (fine-tuned GPT + base pretrained SoVITS)")
+    print("[smoke_test] 2/6 Selecting a GPT-SoVITS-valid (3-10s) prompt clip from Batch 3's chunks")
+    candidates = load_candidates_from_dataset_list(work_dir / "dataset.list")
+    prompt = select_prompt_clip(candidates)
+    print(f"[smoke_test]     using {prompt.audio_path} ({prompt.duration:.1f}s): {prompt.text!r}")
+
+    print("[smoke_test] 3/6 Loading TTS pipeline (fine-tuned GPT + base pretrained SoVITS)")
     paths = default_paths(args.vendor_dir, sys.executable, args.version)
     ensure_on_sys_path(paths)
     checkpoints = TtsCheckpoints(
@@ -81,13 +92,16 @@ def main() -> int:
     with chdir_to_repo_root(paths):
         tts_instance = load_tts(checkpoints)
 
-    print("[smoke_test] 3/5 Building reference-speaker embedding for SECS scoring")
+    print("[smoke_test] 4/6 Building reference-speaker embedding for SECS scoring")
+    # Uses the full original clip (not the short prompt clip above) - Resemblyzer
+    # handles arbitrary-length audio fine, and more audio means a more stable
+    # speaker-identity embedding than just the one short GPT-SoVITS prompt clip.
     ref_samples, ref_sr = load_and_transcode(args.audio_path, sample_rate=16000)
     ref_embedding = compute_embedding(ref_samples, ref_sr)
     secs_fn = default_secs_fn(reference_centroid([ref_embedding]))
     utmos_fn = default_utmos_fn()
 
-    print(f"[smoke_test] 4/5 Generating: {args.target_text!r}")
+    print(f"[smoke_test] 5/6 Generating: {args.target_text!r}")
     start = time.monotonic()
     output_path = work_dir / "generated_output.wav"
     audio_path, metadata_path = generate_and_export(
@@ -95,8 +109,8 @@ def main() -> int:
         output_path,
         tts_instance=tts_instance,
         text_lang="en",
-        ref_audio_path=args.audio_path,
-        prompt_text=args.reference_text,
+        ref_audio_path=prompt.audio_path,
+        prompt_text=prompt.text,
         prompt_lang="en",
         secs_fn=secs_fn,
         utmos_fn=utmos_fn,
@@ -104,7 +118,7 @@ def main() -> int:
     )
     elapsed = time.monotonic() - start
 
-    print("[smoke_test] 5/5 Done")
+    print("[smoke_test] 6/6 Done")
     samples, sample_rate = sf.read(str(audio_path))
     duration = len(samples) / sample_rate
     peak_amplitude = float(max(abs(samples.min()), abs(samples.max())))
