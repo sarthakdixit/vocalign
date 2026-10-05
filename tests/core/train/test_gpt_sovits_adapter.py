@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 
 import pytest
 import yaml
@@ -148,6 +149,39 @@ def test_build_s2_config_does_not_mutate_the_passed_in_template(tmp_path):
     assert FAKE_S2_TEMPLATE == before
 
 
+# --- build_env (PYTHONPATH for any subprocess call into the vendored checkout) ---
+
+
+def test_build_env_includes_pythonpath_for_repo_root_and_gpt_sovits_dir(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    paths = _paths(tmp_path)
+
+    env = adapter.build_env(paths)
+
+    entries = env["PYTHONPATH"].split(os.pathsep)
+    assert str(paths.repo_root) in entries
+    assert str(paths.repo_root / "GPT_SoVITS") in entries
+
+
+def test_build_env_preserves_existing_pythonpath(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTHONPATH", "/some/other/path")
+    paths = _paths(tmp_path)
+
+    env = adapter.build_env(paths)
+
+    assert "/some/other/path" in env["PYTHONPATH"].split(os.pathsep)
+
+
+def test_build_env_merges_extra_vars_without_overwriting_pythonpath(tmp_path, monkeypatch):
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    paths = _paths(tmp_path)
+
+    env = adapter.build_env(paths, extra={"FOO": "bar"})
+
+    assert env["FOO"] == "bar"
+    assert "PYTHONPATH" in env
+
+
 # --- template path/loading helpers ---
 
 
@@ -203,6 +237,7 @@ def test_run_gpt_stage_writes_yaml_config_and_invokes_s1_script(tmp_path, fake_p
     assert call["command"][0] == "python"
     assert "GPT_SoVITS/s1_train.py" in call["command"]
     assert "--config_file" in call["command"]
+    assert str(paths.repo_root / "GPT_SoVITS") in call["env"]["PYTHONPATH"].split(os.pathsep)
 
     config_path = job.experiment_dir / "s1_config.yaml"
     assert config_path.exists()

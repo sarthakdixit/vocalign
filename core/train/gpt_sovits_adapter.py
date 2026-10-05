@@ -13,6 +13,7 @@ real-hardware run (a hand-built config was missing the real acoustic hyperparame
 
 import copy
 import json
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,24 @@ def default_paths(repo_root: Path, python_executable: str, version: str) -> GptS
         pretrained_s2_g=s2g,
         pretrained_s2_d=(s2g.parent / s2d_name) if s2d_name != s2g.name else None,
     )
+
+
+def build_env(paths: GptSoVitsPaths, extra: dict | None = None) -> dict:
+    """Merged env for any subprocess call into the vendored checkout. Both the repo
+    root and GPT_SoVITS/ itself need to be on PYTHONPATH - confirmed empirically on a
+    real run (`s2_train.py` -> module/data_utils.py's `from tools.my_utils import
+    load_audio` needs the repo root; `1-get-text.py`'s `from text.cleaner import
+    clean_text` needs GPT_SoVITS/ - neither is covered by Python's default
+    script-directory sys.path[0] alone, and webui.py's own Popen calls don't set this
+    either). Used by both training-stage calls here and the data-prep scripts."""
+    repo_root = str(Path(paths.repo_root))
+    gpt_sovits_dir = str(Path(paths.repo_root) / "GPT_SoVITS")
+    existing = os.environ.get("PYTHONPATH")
+    entries = [repo_root, gpt_sovits_dir] + ([existing] if existing else [])
+    merged = {**os.environ, "PYTHONPATH": os.pathsep.join(entries)}
+    if extra:
+        merged.update(extra)
+    return merged
 
 
 @dataclass(frozen=True)
@@ -187,7 +206,12 @@ def run_gpt_stage(
     write_yaml_config(config, config_path)
     command = [paths.python_executable, "-s", "GPT_SoVITS/s1_train.py", "--config_file", str(config_path)]
     return run_stage(
-        command, cwd=str(paths.repo_root), on_progress=on_progress, popen_factory=popen_factory, cancel_check=cancel_check
+        command,
+        cwd=str(paths.repo_root),
+        env=build_env(paths),
+        on_progress=on_progress,
+        popen_factory=popen_factory,
+        cancel_check=cancel_check,
     )
 
 
@@ -202,7 +226,12 @@ def run_sovits_stage(
     script = "GPT_SoVITS/s2_train_v3_lora.py" if job.version in {"v3", "v4"} else "GPT_SoVITS/s2_train.py"
     command = [paths.python_executable, "-s", script, "--config", str(config_path)]
     return run_stage(
-        command, cwd=str(paths.repo_root), on_progress=on_progress, popen_factory=popen_factory, cancel_check=cancel_check
+        command,
+        cwd=str(paths.repo_root),
+        env=build_env(paths),
+        on_progress=on_progress,
+        popen_factory=popen_factory,
+        cancel_check=cancel_check,
     )
 
 
