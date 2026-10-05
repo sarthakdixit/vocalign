@@ -37,6 +37,34 @@ def _fake_context(project_id="p1"):
     )
 
 
+# --- _cap_reference_audio (bounds SECS reference-embedding memory regardless of how
+# long the project's raw reference clip is - see the function's own docstring) ---
+
+
+def test_cap_reference_audio_truncates_a_longer_clip():
+    samples = np.arange(16000 * 120)  # 120s at 16kHz
+
+    capped = generation._cap_reference_audio(samples, 16000, max_seconds=60.0)
+
+    assert len(capped) == 16000 * 60
+
+
+def test_cap_reference_audio_leaves_a_shorter_clip_unchanged():
+    samples = np.arange(16000 * 10)  # 10s at 16kHz
+
+    capped = generation._cap_reference_audio(samples, 16000, max_seconds=60.0)
+
+    assert len(capped) == len(samples)
+
+
+def test_cap_reference_audio_uses_the_module_default_when_not_overridden():
+    samples = np.arange(16000 * 120)
+
+    capped = generation._cap_reference_audio(samples, 16000)
+
+    assert len(capped) == int(generation.MAX_SECS_REFERENCE_SECONDS * 16000)
+
+
 # --- load_inference_context caching/eviction ---
 
 

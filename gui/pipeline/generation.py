@@ -22,6 +22,11 @@ from pathlib import Path
 from core.infer.generate import generate_and_export
 from core.projects import manager, storage
 
+# A hardware-driven safety cap, not a research-backed optimum: bounds the memory a
+# SECS reference embedding needs regardless of how long the project's raw reference
+# clip is. See _build_inference_context's comment for the real OOM this fixes.
+MAX_SECS_REFERENCE_SECONDS = 60.0
+
 
 @dataclass(frozen=True)
 class GenerationOutcome:
@@ -72,6 +77,15 @@ def load_inference_context(projects_root, project_id: str, *, build_fn=None) -> 
     return _cache
 
 
+def _cap_reference_audio(samples, sample_rate: int, max_seconds: float = MAX_SECS_REFERENCE_SECONDS):
+    """Confirmed via a real CUDA OOM on a real run: computing a SECS embedding from the
+    FULL raw reference clip scales with its length, and on a project with a long
+    (20min+, "extended" tier) reference recording that blew the ~130MB of VRAM left
+    once GPT+SoVITS+BERT+HuBERT are already loaded. A speaker embedding doesn't need
+    tens of minutes to be stable, so cap it rather than feed the whole thing in."""
+    return samples[: int(max_seconds * sample_rate)]
+
+
 def _build_inference_context(projects_root, project_id: str) -> _ProjectInferenceContext:
     """Real construction: not exercised directly by tests (injected via build_fn
     instead) - this is straightline wiring of already-individually-tested pieces
@@ -107,7 +121,7 @@ def _build_inference_context(projects_root, project_id: str) -> _ProjectInferenc
         tts_instance = load_tts(checkpoints)
 
     ref_samples, ref_sr = load_and_transcode(Path(project.config["raw_audio_path"]))
-    ref_embedding = compute_embedding(ref_samples, ref_sr)
+    ref_embedding = compute_embedding(_cap_reference_audio(ref_samples, ref_sr), ref_sr)
 
     return _ProjectInferenceContext(
         project_id=project_id,
