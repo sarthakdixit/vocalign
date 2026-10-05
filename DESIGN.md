@@ -180,6 +180,8 @@ Work proceeds **one batch at a time**. Each batch = implementation + heavy tests
 
 Batches are sized so each test-and-report cycle stays fast — if a batch turns out too big in practice, it gets split further rather than bundled.
 
+**Progress:** Batch 0 confirmed complete 2026-10-05 (20/20 tests passing, `check_gpu.py` verified against real hardware).
+
 ## 11. Testing strategy
 
 - Default `pytest` run must stay fast and dependency-light: anything that needs the real GPT-SoVITS/whisper models or a GPU is marked `@pytest.mark.slow` / `@pytest.mark.gpu` and skipped by default.
@@ -201,7 +203,7 @@ This is the agreed process for the whole project, not just this doc:
 - **GPT-SoVITS integration shape**: current plan is to vendor it and drive it via subprocess/CLI rather than importing its internals directly, since research-repo internals tend to be unstable — confirmed/adjusted once we can actually see what's importable on your box.
 - **Does GPT-SoVITS expose LoRA/adapter/PEFT tuning natively, or only full fine-tune?** Our training plan (§8.2, RESEARCH.md Finding 3) defaults to parameter-efficient tuning below the deepest tier. If the upstream scripts only support full fine-tune, fall back to small step counts + early stopping at the low tiers rather than patching in PEFT ourselves as a first move.
 - **v2ProPlus vs v3 vs v4 checkpoint choice** — no longer a quality-per-compute question alone. Research surfaced that v2Pro's vocoder is HiFi-GAN-family while v3/v4 moved to BigVGAN-family specifically for better robustness on noisy/non-studio audio (RESEARCH.md Finding 5), which matters more for us than raw compute efficiency. Needs a real A/B on a deliberately imperfect test clip in Batch 3/4, not another secondhand comparison — upstream itself hasn't fully settled v3-vs-v4.
-- **Exact CUDA/driver version** on the Linux machine — `check_gpu.py` (Batch 0) reports this; it determines which torch wheel to pin.
+- **Confirmed hardware** (2026-10-05, via `check_gpu.py` on the Linux box): NVIDIA GeForce RTX 3050 Laptop GPU, CUDA 12.6, ~3.7GB total VRAM, torch 2.14.1+cu126. VRAM is tight enough that the LoRA/adapter default (§3, RESEARCH.md Finding 3) is likely necessary, not just preferable — worth re-checking against actual memory usage once Batch 3 runs a real fine-tune.
 - **Python version**: resolved to 3.10, see Tech Stack table — still worth a glance at `check_gpu.py`/`setup_env.*` output in case your box's default `python3` triggers the version warning.
 - **Recipe-tier step counts/timing** — the duration *boundaries* are now research-backed (§8.2), but how many steps/how long each tier actually takes on your specific GPU is still only confirmed once we see real training runs.
 - **pywebview system deps on your Linux distro** (GTK/Qt backend) — if missing or the box is headless, `--headless` mode is the real primary path; worth knowing which applies before Batch 5.
