@@ -177,18 +177,29 @@ def _train(
     if checkpoint_path is None:
         raise RuntimeError("Training completed but no checkpoint file was found afterward.")
 
+    # Persisted before the quality signal runs (not after) so quality_signal_fn's real
+    # implementation - which loads the project's inference context the same way
+    # Generate does - picks up this checkpoint rather than a stale/missing one.
+    manager.update_config(
+        projects_root, project.id, {"checkpoint_path": str(checkpoint_path), "gpt_sovits_version": version},
+    )
+
     on_progress("Running post-training quality signal...")
-    quality_band = quality_signal_fn(paths, checkpoint_path, dataset_list_path, version)
+    try:
+        quality_band = quality_signal_fn(projects_root, project.id)
+    except Exception as exc:
+        # The checkpoint itself is already valid at this point - a failure in this
+        # diagnostic-only step (e.g. a real CUDA OOM loading the model a second time)
+        # must not undo a successful training run.
+        on_progress(f"Quality signal failed (non-fatal): {exc}")
+        quality_band = None
     quality_dict = (
         {"label": quality_band.label, "average_secs": quality_band.average_secs, "average_utmos": quality_band.average_utmos}
         if quality_band is not None
         else None
     )
 
-    manager.update_config(
-        projects_root, project.id,
-        {"checkpoint_path": str(checkpoint_path), "gpt_sovits_version": version, "quality_band": quality_dict},
-    )
+    manager.update_config(projects_root, project.id, {"quality_band": quality_dict})
     manager.transition_project(projects_root, project.id, ProjectState.TRAINED)
     on_progress(f"Done. Quality signal: {quality_band.label if quality_band else 'unknown'}")
     return TrainingOutcome(
@@ -205,45 +216,34 @@ def _non_completed_outcome(projects_root, project_id: str, result, step_name: st
     raise RuntimeError(f"{step_name} failed: {result.error}")
 
 
-def run_post_training_quality_signal(paths, checkpoint_path: Path, dataset_list_path: Path, version: str):
-    """Real implementation - loads the real TTS pipeline and runs 5 real test
-    sentences (core/infer/quality_signal.py). Not called by tests directly (injected
-    as quality_signal_fn instead); exercised for real by scripts/smoke_test_batch4.py's
-    successor once this is wired into the running app."""
-    from core.audio.io import load_and_transcode
-    from core.infer.prompt_selection import load_candidates_from_dataset_list, select_prompt_clip
+def run_post_training_quality_signal(projects_root, project_id: str):
+    """Real implementation - not called by tests directly (injected as
+    quality_signal_fn instead, which is now called as quality_signal_fn(projects_root,
+    project_id)).
+
+    Reuses gui.pipeline.generation's cached inference context rather than loading its
+    own separate TTS pipeline: confirmed via a real CUDA OOM on a real run that loading
+    two independent copies (one here, one for the very next Generate click) doesn't fit
+    on this hardware. Loading it here instead *pre-warms* that cache, so the first
+    Generate click right after training reuses this same load rather than paying for a
+    second one - this also makes the quality signal's own SECS reference embedding use
+    the full reference clip (via the cached context), consistent with how Generate
+    itself scores, rather than just the short 3-10s prompt clip as before.
+    """
     from core.infer.quality_signal import run_quality_signal
-    from core.infer.ranking import default_secs_fn, default_utmos_fn
-    from core.infer.similarity import compute_embedding, reference_centroid
-    from core.infer.tts_adapter import TtsCheckpoints, load_tts
-    from core.train.gpt_sovits_adapter import chdir_to_repo_root, ensure_on_sys_path
+    from gui.pipeline.generation import load_inference_context
 
     try:
-        candidates = load_candidates_from_dataset_list(dataset_list_path)
-        prompt = select_prompt_clip(candidates)
+        context = load_inference_context(projects_root, project_id)
     except ValueError:
         return None  # no chunk in the required 3-10s range - not fatal to training itself
 
-    checkpoints = TtsCheckpoints(
-        version=version,
-        t2s_weights_path=checkpoint_path,
-        vits_weights_path=paths.pretrained_s2_g,
-        bert_base_path=default_bert_dir(paths.repo_root),
-        cnhubert_base_path=default_cnhubert_dir(paths.repo_root),
-    )
-    ensure_on_sys_path(paths)
-    with chdir_to_repo_root(paths):
-        tts_instance = load_tts(checkpoints)
-
-    ref_samples, ref_sr = load_and_transcode(prompt.audio_path)
-    ref_embedding = compute_embedding(ref_samples, ref_sr)
-
     return run_quality_signal(
-        tts_instance=tts_instance,
+        tts_instance=context.tts_instance,
         text_lang="en",
-        ref_audio_path=prompt.audio_path,
-        prompt_text=prompt.text,
+        ref_audio_path=context.prompt.audio_path,
+        prompt_text=context.prompt.text,
         prompt_lang="en",
-        secs_fn=default_secs_fn(reference_centroid([ref_embedding])),
-        utmos_fn=default_utmos_fn(),
+        secs_fn=context.secs_fn,
+        utmos_fn=context.utmos_fn,
     )

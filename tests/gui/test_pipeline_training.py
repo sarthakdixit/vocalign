@@ -65,6 +65,57 @@ def test_run_training_full_success_path(tmp_path):
     assert updated.config["quality_band"]["label"] == "strong match"
 
 
+def test_run_training_survives_a_quality_signal_failure(tmp_path):
+    # Confirmed via a real CUDA OOM on a real run: the checkpoint is already valid by
+    # the time the quality signal runs, so a failure there (e.g. loading a model a
+    # second time doesn't fit in VRAM) must not undo an otherwise-successful training.
+    projects_root = tmp_path / "projects"
+    project = _preprocessed_project(projects_root, total_speech_seconds=50.0)
+    _write_checkpoint(projects_root, project.id)
+
+    def _raising_quality_signal(*args, **kwargs):
+        raise RuntimeError("CUDA out of memory")
+
+    outcome = training.run_training(
+        projects_root, project.id,
+        run_data_prep_fn=lambda *a, **k: [_completed()],
+        run_gpt_stage_fn=lambda *a, **k: _completed(),
+        quality_signal_fn=_raising_quality_signal,
+    )
+
+    assert outcome.ok is True
+    assert outcome.quality_band is None
+    updated = manager.get_project(projects_root, project.id)
+    assert updated.state == ProjectState.TRAINED
+    assert updated.config["checkpoint_path"] == outcome.checkpoint_path
+    assert updated.config["quality_band"] is None
+
+
+def test_run_training_persists_checkpoint_path_before_running_the_quality_signal(tmp_path):
+    # The real quality_signal_fn loads the project's inference context the same way
+    # Generate does, keyed off project.config["checkpoint_path"] - it must already be
+    # saved by the time quality_signal_fn runs, not only after.
+    projects_root = tmp_path / "projects"
+    project = _preprocessed_project(projects_root, total_speech_seconds=50.0)
+    _write_checkpoint(projects_root, project.id)
+    seen_checkpoint_path = {}
+
+    def _spying_quality_signal(projects_root_arg, project_id_arg):
+        seen_checkpoint_path["value"] = manager.get_project(projects_root_arg, project_id_arg).config.get(
+            "checkpoint_path"
+        )
+        return None
+
+    training.run_training(
+        projects_root, project.id,
+        run_data_prep_fn=lambda *a, **k: [_completed()],
+        run_gpt_stage_fn=lambda *a, **k: _completed(),
+        quality_signal_fn=_spying_quality_signal,
+    )
+
+    assert seen_checkpoint_path["value"] is not None
+
+
 def test_run_training_fails_project_on_data_prep_failure(tmp_path):
     projects_root = tmp_path / "projects"
     project = _preprocessed_project(projects_root, total_speech_seconds=50.0)
