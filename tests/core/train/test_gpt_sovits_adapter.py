@@ -124,6 +124,14 @@ def test_build_s2_config_includes_pretrained_s2d_only_when_given(tmp_path):
     assert with_d["train"]["pretrained_s2D"] == str(tmp_path / "pretrained" / "s2D.pth")
 
 
+def test_build_s2_config_sets_gpu_numbers(tmp_path):
+    # s2_train.py reads hps.train.gpu_numbers at module import time with no fallback -
+    # confirmed with a real AttributeError on a real run when this was missing.
+    config = adapter.build_s2_config(_paths(tmp_path), _job(tmp_path), template=FAKE_S2_TEMPLATE)
+
+    assert config["train"]["gpu_numbers"] == "0"
+
+
 def test_build_s2_config_preserves_template_fields_it_does_not_override(tmp_path):
     # filter_length specifically - this is the exact field the real run crashed on.
     config = adapter.build_s2_config(_paths(tmp_path), _job(tmp_path), template=FAKE_S2_TEMPLATE)

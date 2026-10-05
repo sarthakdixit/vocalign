@@ -150,6 +150,10 @@ def build_s2_config(paths: GptSoVitsPaths, job: FineTuneJob, template: dict | No
     config["train"]["if_save_every_weights"] = True
     config["train"]["save_every_epoch"] = max(1, job.sovits_epochs // 2)
     config["train"]["grad_ckpt"] = False
+    # s2_train.py reads this at module import time, before anything else runs, with no
+    # fallback - confirmed the hard way (AttributeError) on a real run. "0" = single GPU,
+    # dash-separated for multi-GPU (the script does gpu_numbers.replace("-", ",")).
+    config["train"]["gpu_numbers"] = "0"
     config["model"]["version"] = job.version
     config["data"]["exp_dir"] = str(job.experiment_dir)
     config["s2_ckpt_dir"] = str(job.experiment_dir)
