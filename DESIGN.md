@@ -180,7 +180,7 @@ Work proceeds **one batch at a time**. Each batch = implementation + heavy tests
 
 Batches are sized so each test-and-report cycle stays fast — if a batch turns out too big in practice, it gets split further rather than bundled.
 
-**Progress:** Batch 0 confirmed complete 2026-10-05 (20/20 tests passing, `check_gpu.py` verified against real hardware).
+**Progress:** Batch 0 confirmed complete 2026-10-05 (20/20 tests passing, `check_gpu.py` verified against real hardware). Batch 1 confirmed complete 2026-10-05 (58/58 tests passing, including Batch 0's).
 
 ## 11. Testing strategy
 
