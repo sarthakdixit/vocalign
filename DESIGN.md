@@ -50,7 +50,7 @@ Grounded in a literature review conducted 2026-10-05 — see [RESEARCH.md](RESEA
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Language | Python 3.10 (tentative) | Exact version confirmed in Batch 0 against GPT-SoVITS/whisper/torch compatibility on the actual Linux box. |
+| Language | **Python 3.10** | Confirmed, not a placeholder: current PyTorch (2.14+) happily supports 3.10-3.14, so it isn't the constraint — GPT-SoVITS is. Its own tested range is 3.9-3.11 and its official conda setup uses `python=3.10` directly; 3.9 is already past CPython's security-support end-of-life. `scripts/setup_env.*` warns (doesn't hard-block) if the detected interpreter is outside 3.10/3.11. |
 | ML runtime | PyTorch + torchaudio | CUDA build primary; CPU-only build as fallback. Exact CUDA toolkit version depends on the Linux box's driver — discovered in Batch 0. |
 | Voice model | GPT-SoVITS (vendored, subprocess/CLI-wrapped — see §9 risk notes) | Training + inference engine. |
 | ASR/transcript verification | faster-whisper | Confirms user-supplied reference text matches what's actually said, and segments long uploads — not model-level alignment (see §3). Also the WER hard-gate at generation time. |
@@ -202,7 +202,7 @@ This is the agreed process for the whole project, not just this doc:
 - **Does GPT-SoVITS expose LoRA/adapter/PEFT tuning natively, or only full fine-tune?** Our training plan (§8.2, RESEARCH.md Finding 3) defaults to parameter-efficient tuning below the deepest tier. If the upstream scripts only support full fine-tune, fall back to small step counts + early stopping at the low tiers rather than patching in PEFT ourselves as a first move.
 - **v2ProPlus vs v3 vs v4 checkpoint choice** — no longer a quality-per-compute question alone. Research surfaced that v2Pro's vocoder is HiFi-GAN-family while v3/v4 moved to BigVGAN-family specifically for better robustness on noisy/non-studio audio (RESEARCH.md Finding 5), which matters more for us than raw compute efficiency. Needs a real A/B on a deliberately imperfect test clip in Batch 3/4, not another secondhand comparison — upstream itself hasn't fully settled v3-vs-v4.
 - **Exact CUDA/driver version** on the Linux machine — `check_gpu.py` (Batch 0) reports this; it determines which torch wheel to pin.
-- **Python version compatibility** across GPT-SoVITS + faster-whisper + current PyTorch CUDA builds — confirmed in Batch 0.
+- **Python version**: resolved to 3.10, see Tech Stack table — still worth a glance at `check_gpu.py`/`setup_env.*` output in case your box's default `python3` triggers the version warning.
 - **Recipe-tier step counts/timing** — the duration *boundaries* are now research-backed (§8.2), but how many steps/how long each tier actually takes on your specific GPU is still only confirmed once we see real training runs.
 - **pywebview system deps on your Linux distro** (GTK/Qt backend) — if missing or the box is headless, `--headless` mode is the real primary path; worth knowing which applies before Batch 5.
 - **Citation confidence**: most of RESEARCH.md is peer-reviewed/primary, but the XTTS-v2 duration-ablation thesis and the 2026 RVCBench paper are newer/unreviewed — their specific numbers are directional, not settled; don't hard-code thresholds derived only from those two without a sanity check against real results.
