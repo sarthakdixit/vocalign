@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.audio.io import load_and_transcode  # noqa: E402
 from core.infer.generate import generate_and_export  # noqa: E402
+from core.infer.naturalness import capture_pristine_torch_state  # noqa: E402
 from core.infer.prompt_selection import load_candidates_from_dataset_list, select_prompt_clip  # noqa: E402
 from core.infer.ranking import default_secs_fn, default_utmos_fn  # noqa: E402
 from core.infer.similarity import compute_embedding, reference_centroid  # noqa: E402
@@ -51,6 +52,11 @@ def _find_latest_checkpoint(weights_dir: Path) -> Path:
 
 
 def main() -> int:
+    # Must happen before any GPT-SoVITS import (load_tts(), below) has a chance to
+    # monkey-patch torch.nn.functional.multi_head_attention_forward - see
+    # naturalness.py's module docstring for the real conflict this works around.
+    capture_pristine_torch_state()
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("audio_path", type=Path)
     parser.add_argument("target_text")

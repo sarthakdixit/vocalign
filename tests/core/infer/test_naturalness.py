@@ -1,4 +1,7 @@
+from types import SimpleNamespace
+
 import numpy as np
+import pytest
 
 from core.infer import naturalness
 
@@ -70,3 +73,43 @@ def test_predict_mos_unwraps_a_tensor_like_result_via_item():
 
     assert result == 4.5
     assert isinstance(result, float)
+
+
+# --- _temporarily_set (the mechanics behind restoring GPT-SoVITS's monkey-patched
+# torch.nn.functional.multi_head_attention_forward around a real UTMOS call - see
+# naturalness.py's module docstring for the real conflict this works around) ---
+
+
+def test_temporarily_set_sets_the_value_inside_the_with_block():
+    ns = SimpleNamespace(attr="original")
+
+    with naturalness._temporarily_set(ns, "attr", "patched"):
+        assert ns.attr == "patched"
+
+
+def test_temporarily_set_restores_the_original_value_after_the_with_block():
+    ns = SimpleNamespace(attr="original")
+
+    with naturalness._temporarily_set(ns, "attr", "patched"):
+        pass
+
+    assert ns.attr == "original"
+
+
+def test_temporarily_set_restores_even_if_the_body_raises():
+    ns = SimpleNamespace(attr="original")
+
+    with pytest.raises(ValueError):
+        with naturalness._temporarily_set(ns, "attr", "patched"):
+            raise ValueError("boom")
+
+    assert ns.attr == "original"
+
+
+def test_pristine_multihead_attention_is_a_no_op_when_nothing_was_captured(monkeypatch):
+    # Importing torch here would be a real dependency this test shouldn't need -
+    # confirms the early-return path never touches it when nothing was captured.
+    monkeypatch.setattr(naturalness, "_pristine_mha_forward", None)
+
+    with naturalness._pristine_multihead_attention():
+        pass
