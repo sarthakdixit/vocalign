@@ -148,6 +148,20 @@ def test_build_s2_config_grad_ckpt_can_be_disabled(tmp_path):
     assert config["train"]["grad_ckpt"] is False
 
 
+def test_build_s2_config_segment_size_defaults_to_template_value(tmp_path):
+    config = adapter.build_s2_config(_paths(tmp_path), _job(tmp_path), template=FAKE_S2_TEMPLATE)
+
+    assert config["train"]["segment_size"] == FAKE_S2_TEMPLATE["train"]["segment_size"]
+
+
+def test_build_s2_config_segment_size_can_be_overridden(tmp_path):
+    config = adapter.build_s2_config(
+        _paths(tmp_path), _job(tmp_path, segment_size=8192), template=FAKE_S2_TEMPLATE
+    )
+
+    assert config["train"]["segment_size"] == 8192
+
+
 def test_build_s2_config_preserves_template_fields_it_does_not_override(tmp_path):
     # filter_length specifically - this is the exact field the real run crashed on.
     config = adapter.build_s2_config(_paths(tmp_path), _job(tmp_path), template=FAKE_S2_TEMPLATE)

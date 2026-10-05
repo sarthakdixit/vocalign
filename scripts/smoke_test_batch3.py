@@ -39,6 +39,13 @@ def main() -> int:
     parser.add_argument("audio_path", type=Path)
     parser.add_argument("reference_text")
     parser.add_argument("--version", default="v2Pro")
+    parser.add_argument(
+        "--segment-size",
+        type=int,
+        default=None,
+        help="Override the SoVITS stage's train.segment_size (samples/step) - lower uses less VRAM "
+        "per step at some cost to training quality/stability. Template default is 20480.",
+    )
     parser.add_argument("--vendor-dir", type=Path, default=REPO_ROOT / "vendor" / "GPT-SoVITS")
     parser.add_argument("--work-dir", type=Path, default=REPO_ROOT / "smoke_test_output")
     args = parser.parse_args()
@@ -110,6 +117,7 @@ def main() -> int:
         gpt_epochs=recipe.gpt_epochs,
         sovits_epochs=recipe.sovits_epochs,
         lora_rank=recipe.lora_rank,
+        segment_size=args.segment_size,
     )
 
     print("[smoke_test] 6/7 Running GPT-SoVITS's own data-prep pipeline (this needs the")

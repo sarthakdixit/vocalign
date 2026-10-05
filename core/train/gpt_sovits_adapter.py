@@ -118,6 +118,7 @@ class FineTuneJob:
     batch_size: int = 1
     use_fp16: bool = True
     grad_ckpt: bool = True
+    segment_size: int | None = None  # None = leave the template's own tuned value alone
 
 
 def s2_template_path(repo_root, version: str) -> Path:
@@ -176,6 +177,11 @@ def build_s2_config(paths: GptSoVitsPaths, job: FineTuneJob, template: dict | No
     # fallback - confirmed the hard way (AttributeError) on a real run. "0" = single GPU,
     # dash-separated for multi-GPU (the script does gpu_numbers.replace("-", ",")).
     config["train"]["gpu_numbers"] = "0"
+    # Unlike grad_ckpt, this has a real quality/stability tradeoff (shorter segments =
+    # less context per training step), so it's an explicit opt-in rather than a silent
+    # default - left alone (None) respects GPT-SoVITS's own tuned template value.
+    if job.segment_size is not None:
+        config["train"]["segment_size"] = job.segment_size
     config["model"]["version"] = job.version
     config["data"]["exp_dir"] = str(job.experiment_dir)
     config["s2_ckpt_dir"] = str(job.experiment_dir)
