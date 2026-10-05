@@ -44,7 +44,9 @@ def main() -> int:
         type=int,
         default=None,
         help="Override the SoVITS stage's train.segment_size (samples/step) - lower uses less VRAM "
-        "per step at some cost to training quality/stability. Template default is 20480.",
+        "per step at some cost to training quality/stability. Must be a multiple of the model's "
+        "hop_length (640) or the model breaks internally with a shape-mismatch error. "
+        "Template default is 20480; try 10240 for roughly half the memory.",
     )
     parser.add_argument("--vendor-dir", type=Path, default=REPO_ROOT / "vendor" / "GPT-SoVITS")
     parser.add_argument("--work-dir", type=Path, default=REPO_ROOT / "smoke_test_output")

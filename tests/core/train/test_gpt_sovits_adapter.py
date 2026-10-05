@@ -156,10 +156,23 @@ def test_build_s2_config_segment_size_defaults_to_template_value(tmp_path):
 
 def test_build_s2_config_segment_size_can_be_overridden(tmp_path):
     config = adapter.build_s2_config(
-        _paths(tmp_path), _job(tmp_path, segment_size=8192), template=FAKE_S2_TEMPLATE
+        _paths(tmp_path), _job(tmp_path, segment_size=10240), template=FAKE_S2_TEMPLATE
     )
 
-    assert config["train"]["segment_size"] == 8192
+    assert config["train"]["segment_size"] == 10240
+
+
+def test_build_s2_config_rejects_segment_size_not_a_multiple_of_hop_length(tmp_path):
+    # Confirmed the hard way with a real shape-mismatch RuntimeError on a real run:
+    # 8192 isn't a multiple of hop_length (640), and that broke the model internally.
+    with pytest.raises(ValueError, match="multiple of"):
+        adapter.build_s2_config(_paths(tmp_path), _job(tmp_path, segment_size=8192), template=FAKE_S2_TEMPLATE)
+
+
+def test_build_s2_config_segment_size_error_suggests_a_valid_value(tmp_path):
+    # round(8192 / 640) * 640 = 13 * 640 = 8320 - the nearest multiple of hop_length.
+    with pytest.raises(ValueError, match="8320"):
+        adapter.build_s2_config(_paths(tmp_path), _job(tmp_path, segment_size=8192), template=FAKE_S2_TEMPLATE)
 
 
 def test_build_s2_config_preserves_template_fields_it_does_not_override(tmp_path):

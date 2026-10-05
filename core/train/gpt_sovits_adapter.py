@@ -181,6 +181,16 @@ def build_s2_config(paths: GptSoVitsPaths, job: FineTuneJob, template: dict | No
     # less context per training step), so it's an explicit opt-in rather than a silent
     # default - left alone (None) respects GPT-SoVITS's own tuned template value.
     if job.segment_size is not None:
+        hop_length = config["data"]["hop_length"]
+        if job.segment_size % hop_length != 0:
+            # Confirmed the hard way with a real shape-mismatch RuntimeError: an
+            # incompatible value rounds to a different mel-frame count in two separate
+            # code paths inside the model, which then fail to match each other's shape.
+            suggestion = round(job.segment_size / hop_length) * hop_length
+            raise ValueError(
+                f"segment_size ({job.segment_size}) must be a multiple of this model's "
+                f"hop_length ({hop_length}). Try {suggestion} instead."
+            )
         config["train"]["segment_size"] = job.segment_size
     config["model"]["version"] = job.version
     config["data"]["exp_dir"] = str(job.experiment_dir)
