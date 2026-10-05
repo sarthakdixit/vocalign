@@ -128,7 +128,7 @@ def _run_prep_script(
     popen_factory=None,
     cancel_check=None,
 ) -> RunResult:
-    merged_env = {**os.environ, **script_env}
+    merged_env = _build_prep_env(paths, script_env)
     command = [paths.python_executable, "-s", f"GPT_SoVITS/prepare_datasets/{script_name}"]
     return run_stage(
         command,
@@ -138,6 +138,20 @@ def _run_prep_script(
         popen_factory=popen_factory,
         cancel_check=cancel_check,
     )
+
+
+def _build_prep_env(paths: GptSoVitsPaths, script_env: dict) -> dict:
+    # Empirically verified 2026-10-06: 1-get-text.py does no sys.path setup of its own
+    # at all, and the other 3 scripts only sys.path.append their own cwd, which isn't
+    # enough either - all 4 need BOTH the repo root AND GPT_SoVITS/ itself on
+    # PYTHONPATH. webui.py's own Popen call doesn't set this; it evidently relies on
+    # something in its install/launch flow we don't have (its own Dockerfile sets only
+    # the repo root, which alone was confirmed NOT sufficient for these specific scripts).
+    repo_root = str(Path(paths.repo_root))
+    gpt_sovits_dir = str(Path(paths.repo_root) / "GPT_SoVITS")
+    existing = os.environ.get("PYTHONPATH")
+    entries = [repo_root, gpt_sovits_dir] + ([existing] if existing else [])
+    return {**os.environ, **script_env, "PYTHONPATH": os.pathsep.join(entries)}
 
 
 def _merge_part_file(part_path: Path, merged_path: Path) -> None:

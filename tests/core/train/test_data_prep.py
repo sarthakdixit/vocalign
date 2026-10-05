@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from core.train import data_prep
@@ -153,6 +155,30 @@ def test_run_all_prep_steps_skips_sv_step_for_non_pro_versions(tmp_path, fake_po
     scripts_called = [c["command"][2] for c in factory.calls]
     assert "GPT_SoVITS/prepare_datasets/2-get-sv.py" not in scripts_called
     assert len(results) == 3
+
+
+def test_prep_script_env_includes_pythonpath_for_repo_root_and_gpt_sovits_dir(
+    tmp_path, fake_popen_factory, monkeypatch
+):
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    factory = fake_popen_factory(lines=[], returncode=0)
+    paths = _paths(tmp_path)
+
+    data_prep.run_get_text(paths, _job(tmp_path), popen_factory=factory)
+
+    entries = factory.calls[0]["env"]["PYTHONPATH"].split(os.pathsep)
+    assert str(paths.repo_root) in entries
+    assert str(paths.repo_root / "GPT_SoVITS") in entries
+
+
+def test_prep_script_env_preserves_existing_pythonpath(tmp_path, fake_popen_factory, monkeypatch):
+    monkeypatch.setenv("PYTHONPATH", "/some/other/path")
+    factory = fake_popen_factory(lines=[], returncode=0)
+
+    data_prep.run_get_hubert_wav32k(_paths(tmp_path), _job(tmp_path), popen_factory=factory)
+
+    entries = factory.calls[0]["env"]["PYTHONPATH"].split(os.pathsep)
+    assert "/some/other/path" in entries
 
 
 def test_default_bert_dir_and_cnhubert_dir_resolve_under_pretrained_models(tmp_path):
