@@ -1,0 +1,10 @@
+# CUDA torch build. Installed automatically by scripts/setup_env.* when
+# nvidia-smi is found. cu124 is a best-guess default (CUDA 12.4 wheels) -
+# run scripts/check_gpu.py after install; if it reports a driver that needs
+# a different CUDA version, change "cu124" below to the matching tag
+# (cu118 / cu121 / cu126 / cu128 / ...) and re-run:
+#   pip install -r requirements-cuda.txt --force-reinstall
+--index-url https://download.pytorch.org/whl/cu124
+
+torch>=2.4
+torchaudio>=2.4

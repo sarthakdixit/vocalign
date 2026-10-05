@@ -1,0 +1,6 @@
+# CPU-only torch build. Installed automatically by scripts/setup_env.*
+# when no NVIDIA GPU is detected.
+--index-url https://download.pytorch.org/whl/cpu
+
+torch>=2.4
+torchaudio>=2.4

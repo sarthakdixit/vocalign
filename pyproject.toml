@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clone-voice"
+version = "0.1.0"
+description = "Personal cross-platform voice cloning app"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+include = ["core*", "gui*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+markers = [
+    "slow: real-model or long-running test, opt-in only (pytest -m slow)",
+    "gpu: requires a real GPU, opt-in only (pytest -m gpu)",
+]
+addopts = "-m 'not slow and not gpu' -ra"
