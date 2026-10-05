@@ -46,22 +46,24 @@ def test_invalid_level_falls_back_to_default_without_crashing(tmp_path):
     assert logger.level == logging.INFO
 
 
+def _our_handlers(logger):
+    return [h for h in logger.handlers if getattr(h, logging_setup._OWN_HANDLER_ATTR, False)]
+
+
 def test_handlers_are_not_duplicated_on_repeated_calls(tmp_path):
     logging_setup.configure_logging(log_dir=tmp_path)
     logging_setup.configure_logging(log_dir=tmp_path)
     logger = logging.getLogger(logging_setup.LOGGER_NAME)
-    assert len(logger.handlers) == 2  # console + file, not 4
+    # Exactly our own console + file handler, not 4 - and regardless of any
+    # third-party handlers (e.g. pytest's own) also sitting on this logger.
+    assert len(_our_handlers(logger)) == 2
 
 
 def test_console_handler_attached(tmp_path):
     logging_setup.configure_logging(log_dir=tmp_path)
     logger = logging.getLogger(logging_setup.LOGGER_NAME)
-    plain_stream_handlers = [
-        h
-        for h in logger.handlers
-        if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
-    ]
-    assert len(plain_stream_handlers) == 1
+    our_plain_stream_handlers = [h for h in _our_handlers(logger) if not isinstance(h, logging.FileHandler)]
+    assert len(our_plain_stream_handlers) == 1
 
 
 def test_log_file_created_and_receives_messages(tmp_path):

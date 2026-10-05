@@ -9,7 +9,7 @@ description = "Personal cross-platform voice cloning app"
 requires-python = ">=3.10"
 
 [tool.setuptools.packages.find]
-include = ["core*", "gui*"]
+include = ["core", "core.*", "gui", "gui.*"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
