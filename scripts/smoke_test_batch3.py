@@ -27,13 +27,7 @@ from core.train.data_prep import (  # noqa: E402
     run_all_prep_steps,
 )
 from core.train.dataset import write_dataset_list  # noqa: E402
-from core.train.gpt_sovits_adapter import (  # noqa: E402
-    FineTuneJob,
-    build_s2_config,
-    default_paths,
-    run_fine_tune,
-    write_json_config,
-)
+from core.train.gpt_sovits_adapter import FineTuneJob, default_paths, run_fine_tune  # noqa: E402
 from core.train.recipe import select_recipe  # noqa: E402
 from core.train.runner import RunStatus  # noqa: E402
 
@@ -120,15 +114,12 @@ def main() -> int:
 
     print("[smoke_test] 6/7 Running GPT-SoVITS's own data-prep pipeline (this needs the")
     print("[smoke_test]     pretrained checkpoints from scripts/vendor_gpt_sovits.sh)")
-    s2_config_path = experiment_dir / "s2_config.json"
-    write_json_config(build_s2_config(paths, job), s2_config_path)
     prep_job = DataPrepJob(
         dataset_list_path=dataset_list_path,
         audio_dir=audio_dir,
         experiment_dir=experiment_dir,
         bert_pretrained_dir=default_bert_dir(args.vendor_dir),
         cnhubert_pretrained_dir=default_cnhubert_dir(args.vendor_dir),
-        s2_config_path=s2_config_path,
         version=args.version,
     )
     prep_results = run_all_prep_steps(paths, prep_job, on_progress=print)

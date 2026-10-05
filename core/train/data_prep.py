@@ -10,7 +10,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.train.gpt_sovits_adapter import GptSoVitsPaths
+from core.train.gpt_sovits_adapter import GptSoVitsPaths, s2_template_path
 from core.train.runner import RunResult, RunStatus, run_stage
 
 # Hardcoded in webui.py itself, inside the same pretrained_models/sv/ directory the
@@ -37,7 +37,6 @@ class DataPrepJob:
     experiment_dir: Path
     bert_pretrained_dir: Path
     cnhubert_pretrained_dir: Path
-    s2_config_path: Path
     version: str = "v2Pro"
     use_fp16: bool = True
     cuda_visible_devices: str = "0"
@@ -75,9 +74,11 @@ def run_get_sv(paths: GptSoVitsPaths, job: DataPrepJob, **kwargs) -> RunResult:
 
 
 def run_get_semantic(paths: GptSoVitsPaths, job: DataPrepJob, **kwargs) -> RunResult:
+    # webui.py's open1c points this straight at the raw, unmodified template file -
+    # 3-get-semantic.py never gets a mutated temp config, unlike the training stages.
     env = _base_env(job) | {
         "pretrained_s2G": str(paths.pretrained_s2_g),
-        "s2config_path": str(job.s2_config_path),
+        "s2config_path": str(s2_template_path(paths.repo_root, job.version)),
     }
     result = _run_prep_script(paths, "3-get-semantic.py", env, **kwargs)
     if result.status is RunStatus.COMPLETED:

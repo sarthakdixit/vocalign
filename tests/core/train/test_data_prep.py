@@ -23,7 +23,6 @@ def _job(tmp_path, **overrides):
         experiment_dir=tmp_path / "experiment",
         bert_pretrained_dir=tmp_path / "pretrained" / "bert",
         cnhubert_pretrained_dir=tmp_path / "pretrained" / "hubert",
-        s2_config_path=tmp_path / "s2_config.json",
         version="v2Pro",
     )
     defaults.update(overrides)
@@ -101,7 +100,7 @@ def test_run_get_sv_sets_hardcoded_sv_model_path(tmp_path, fake_popen_factory):
 def test_run_get_semantic_sets_expected_env_and_no_wav_dir(tmp_path, fake_popen_factory):
     factory = fake_popen_factory(lines=[], returncode=0)
     paths = _paths(tmp_path)
-    job = _job(tmp_path)
+    job = _job(tmp_path, version="v2Pro")
 
     data_prep.run_get_semantic(paths, job, popen_factory=factory)
 
@@ -109,7 +108,7 @@ def test_run_get_semantic_sets_expected_env_and_no_wav_dir(tmp_path, fake_popen_
     assert "GPT_SoVITS/prepare_datasets/3-get-semantic.py" in call["command"]
     env = call["env"]
     assert env["pretrained_s2G"] == str(paths.pretrained_s2_g)
-    assert env["s2config_path"] == str(job.s2_config_path)
+    assert env["s2config_path"] == str(paths.repo_root / "GPT_SoVITS" / "configs" / "s2v2Pro.json")
     assert "inp_wav_dir" not in env
 
 
