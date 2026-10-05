@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """One-off real smoke test for Batch 3: preprocess a real clip end-to-end through our
-own pipeline, drive GPT-SoVITS's data-prep scripts, then attempt a tiny fine-tune.
+own pipeline, drive GPT-SoVITS's data-prep scripts, then fine-tune the GPT (text-to-
+semantic) stage locally. The SoVITS (acoustic) stage is NOT trained here by design
+(DESIGN.md S13, 2026-10-06) - confirmed with real attempts that it doesn't fit this
+hardware's VRAM even at the smallest tier. It stays at its pretrained checkpoint with
+zero-shot reference conditioning, wired up at inference time in Batch 4.
 
 Needs vendor/GPT-SoVITS/ set up first (bash scripts/vendor_gpt_sovits.sh) and a short
 real reference audio clip + its transcript text.
@@ -27,7 +31,7 @@ from core.train.data_prep import (  # noqa: E402
     run_all_prep_steps,
 )
 from core.train.dataset import write_dataset_list  # noqa: E402
-from core.train.gpt_sovits_adapter import FineTuneJob, default_paths, run_fine_tune  # noqa: E402
+from core.train.gpt_sovits_adapter import FineTuneJob, default_paths, run_gpt_stage  # noqa: E402
 from core.train.recipe import select_recipe  # noqa: E402
 from core.train.runner import RunStatus  # noqa: E402
 
@@ -39,15 +43,6 @@ def main() -> int:
     parser.add_argument("audio_path", type=Path)
     parser.add_argument("reference_text")
     parser.add_argument("--version", default="v2Pro")
-    parser.add_argument(
-        "--segment-size",
-        type=int,
-        default=None,
-        help="Override the SoVITS stage's train.segment_size (samples/step) - lower uses less VRAM "
-        "per step at some cost to training quality/stability. Must be a multiple of the model's "
-        "hop_length (640) or the model breaks internally with a shape-mismatch error. "
-        "Template default is 20480; try 10240 for roughly half the memory.",
-    )
     parser.add_argument("--vendor-dir", type=Path, default=REPO_ROOT / "vendor" / "GPT-SoVITS")
     parser.add_argument("--work-dir", type=Path, default=REPO_ROOT / "smoke_test_output")
     args = parser.parse_args()
@@ -101,11 +96,8 @@ def main() -> int:
     print(f"[smoke_test]     dataset list: {dataset_list_path} ({skipped} low-confidence chunk(s) skipped)")
 
     print("[smoke_test] 5/7 Selecting recipe")
-    recipe = select_recipe(total_seconds, version=args.version)
-    print(
-        f"[smoke_test]     tier={recipe.tier} attempt_training={recipe.attempt_training} "
-        f"lora_rank={recipe.lora_rank} gpt_epochs={recipe.gpt_epochs} sovits_epochs={recipe.sovits_epochs}"
-    )
+    recipe = select_recipe(total_seconds)
+    print(f"[smoke_test]     tier={recipe.tier} attempt_training={recipe.attempt_training} gpt_epochs={recipe.gpt_epochs}")
     if not recipe.attempt_training:
         print("[smoke_test] Not enough audio to attempt training (zero-shot tier) - stopping here.")
         return 0
@@ -117,9 +109,6 @@ def main() -> int:
         experiment_dir=experiment_dir,
         version=args.version,
         gpt_epochs=recipe.gpt_epochs,
-        sovits_epochs=recipe.sovits_epochs,
-        lora_rank=recipe.lora_rank,
-        segment_size=args.segment_size,
     )
 
     print("[smoke_test] 6/7 Running GPT-SoVITS's own data-prep pipeline (this needs the")
@@ -138,13 +127,12 @@ def main() -> int:
         print(f"[smoke_test] Data prep failed: {failed.error}", file=sys.stderr)
         return 1
 
-    print("[smoke_test] 7/7 Running fine-tune (this is the real test)")
-    stage1, stage2 = run_fine_tune(paths, job, on_progress=print)
+    print("[smoke_test] 7/7 Fine-tuning the GPT stage locally (the SoVITS/acoustic stage")
+    print("[smoke_test]     stays at its pretrained checkpoint by design - see module docstring)")
+    stage1 = run_gpt_stage(paths, job, on_progress=print)
 
     print(f"[smoke_test] GPT stage: {stage1.status.value}" + (f" ({stage1.error})" if stage1.error else ""))
-    if stage2 is not None:
-        print(f"[smoke_test] SoVITS stage: {stage2.status.value}" + (f" ({stage2.error})" if stage2.error else ""))
-    return 0
+    return 0 if stage1.status is RunStatus.COMPLETED else 1
 
 
 if __name__ == "__main__":

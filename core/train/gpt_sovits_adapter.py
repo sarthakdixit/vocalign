@@ -9,6 +9,19 @@ SoVITS stage) and overlays only the keys webui.py's own open1Bb/open1Ba function
 overlay - NOT a config built from scratch, which is what caused a real
 `AttributeError: 'HParams' object has no attribute 'filter_length'` on the first
 real-hardware run (a hand-built config was missing the real acoustic hyperparameters).
+
+DECISION (2026-10-06, confirmed with real training attempts, not estimates): only the
+GPT stage (`run_gpt_stage`) is part of the local pipeline. The SoVITS stage
+(`run_sovits_stage`) does not fit this hardware's VRAM even at the smallest tier, after
+trying gradient checkpointing, CUDA allocator tuning, and a halved segment_size - all
+landed at the same ~3.57-3.58GB-of-3.68GB ceiling, pointing at a fixed baseline cost
+(both networks + Adam optimizer state under DDP) rather than anything tunable here.
+`run_sovits_stage`/`build_s2_config` are kept, fully tested and working up to that
+hardware wall, as the starting point for a possible future cloud-burst training
+feature - they are not called by anything in the local pipeline. Locally, the SoVITS
+stage stays at its pretrained checkpoint with zero-shot reference conditioning at
+inference time (Batch 4): `pretrained_s2_g`/`pretrained_s2_d` point at the base
+checkpoint, only `pretrained_s1` points at our fine-tuned one.
 """
 
 import copy
@@ -19,7 +32,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.train.runner import RunResult, RunStatus, run_stage
+from core.train.runner import RunResult, run_stage
 
 # Confirmed 2026-10-06 against config.py's pretrained_sovits_name/pretrained_gpt_name
 # dicts in the real repo, relative to GPT_SoVITS/ inside the vendored checkout.
@@ -114,6 +127,9 @@ class FineTuneJob:
     experiment_dir: Path
     version: str = "v2Pro"
     gpt_epochs: int = 8
+    # Everything below is only consumed by run_sovits_stage/build_s2_config, which the
+    # local pipeline no longer calls (see module docstring) - kept for a possible
+    # future cloud-training feature, not used by anything local right now.
     sovits_epochs: int = 8
     lora_rank: int | None = None
     batch_size: int = 1
@@ -253,6 +269,9 @@ def run_gpt_stage(
 def run_sovits_stage(
     paths: GptSoVitsPaths, job: FineTuneJob, *, on_progress=None, popen_factory=None, cancel_check=None
 ) -> RunResult:
+    """Not called by the local pipeline (see module docstring) - confirmed infeasible
+    on the target hardware's VRAM. Kept as the starting point for a possible future
+    cloud-training feature; fully tested and reaches real training on a capable GPU."""
     config = build_s2_config(paths, job)
     Path(config["save_weight_dir"]).mkdir(parents=True, exist_ok=True)
     Path(config["data"]["exp_dir"]).mkdir(parents=True, exist_ok=True)
@@ -271,17 +290,6 @@ def run_sovits_stage(
         popen_factory=popen_factory,
         cancel_check=cancel_check,
     )
-
-
-def run_fine_tune(
-    paths: GptSoVitsPaths, job: FineTuneJob, *, on_progress=None, popen_factory=None, cancel_check=None
-) -> tuple[RunResult, RunResult | None]:
-    """Runs both stages in sequence; skips stage 2 entirely if stage 1 didn't complete."""
-    stage1 = run_gpt_stage(paths, job, on_progress=on_progress, popen_factory=popen_factory, cancel_check=cancel_check)
-    if stage1.status is not RunStatus.COMPLETED:
-        return stage1, None
-    stage2 = run_sovits_stage(paths, job, on_progress=on_progress, popen_factory=popen_factory, cancel_check=cancel_check)
-    return stage1, stage2
 
 
 def write_yaml_config(config: dict, path: Path) -> Path:

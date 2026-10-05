@@ -262,7 +262,8 @@ def test_load_s2_template_reads_a_real_file(tmp_path):
     assert loaded == FAKE_S2_TEMPLATE
 
 
-# --- run_gpt_stage / run_sovits_stage / run_fine_tune ---
+# --- run_gpt_stage / run_sovits_stage (the latter not called by the local pipeline -
+# see module docstring - but still tested since it's kept for a future cloud feature) ---
 
 
 def test_run_gpt_stage_writes_yaml_config_and_invokes_s1_script(tmp_path, fake_popen_factory):
@@ -415,33 +416,6 @@ def test_run_sovits_stage_uses_full_script_for_v2_family(tmp_path, fake_popen_fa
     adapter.run_sovits_stage(paths, job, popen_factory=factory)
 
     assert "GPT_SoVITS/s2_train.py" in factory.calls[0]["command"]
-
-
-def test_run_fine_tune_skips_stage2_when_stage1_fails(tmp_path, fake_popen_factory):
-    factory = fake_popen_factory(lines=["error"], returncode=1)
-    paths = _paths(tmp_path)
-    job = _job(tmp_path)
-    _write_s1_template_file(paths, job.version)
-
-    stage1, stage2 = adapter.run_fine_tune(paths, job, popen_factory=factory)
-
-    assert stage1.status == RunStatus.FAILED
-    assert stage2 is None
-    assert len(factory.calls) == 1
-
-
-def test_run_fine_tune_runs_both_stages_on_success(tmp_path, fake_popen_factory):
-    factory = fake_popen_factory(lines=[], returncode=0)
-    paths = _paths(tmp_path)
-    job = _job(tmp_path)
-    _write_s1_template_file(paths, job.version)
-    _write_s2_template_file(paths, job.version)
-
-    stage1, stage2 = adapter.run_fine_tune(paths, job, popen_factory=factory)
-
-    assert stage1.status == RunStatus.COMPLETED
-    assert stage2.status == RunStatus.COMPLETED
-    assert len(factory.calls) == 2
 
 
 # --- default_paths (pretrained checkpoint locations) ---
