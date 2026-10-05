@@ -165,8 +165,13 @@ def build_s2_config(paths: GptSoVitsPaths, job: FineTuneJob, template: dict | No
 def run_gpt_stage(
     paths: GptSoVitsPaths, job: FineTuneJob, *, on_progress=None, popen_factory=None, cancel_check=None
 ) -> RunResult:
+    config = build_s1_config(paths, job)
+    # s1_train.py shutil.move()s checkpoints into half_weights_save_dir without ever
+    # creating it itself - confirmed the hard way on a real run (FileNotFoundError).
+    Path(config["train"]["half_weights_save_dir"]).mkdir(parents=True, exist_ok=True)
+    Path(config["output_dir"]).mkdir(parents=True, exist_ok=True)
     config_path = job.experiment_dir / "s1_config.yaml"
-    write_yaml_config(build_s1_config(paths, job), config_path)
+    write_yaml_config(config, config_path)
     command = [paths.python_executable, "-s", "GPT_SoVITS/s1_train.py", "--config_file", str(config_path)]
     return run_stage(
         command, cwd=str(paths.repo_root), on_progress=on_progress, popen_factory=popen_factory, cancel_check=cancel_check
@@ -176,8 +181,11 @@ def run_gpt_stage(
 def run_sovits_stage(
     paths: GptSoVitsPaths, job: FineTuneJob, *, on_progress=None, popen_factory=None, cancel_check=None
 ) -> RunResult:
+    config = build_s2_config(paths, job)
+    Path(config["save_weight_dir"]).mkdir(parents=True, exist_ok=True)
+    Path(config["data"]["exp_dir"]).mkdir(parents=True, exist_ok=True)
     config_path = job.experiment_dir / "s2_config.json"
-    write_json_config(build_s2_config(paths, job), config_path)
+    write_json_config(config, config_path)
     script = "GPT_SoVITS/s2_train_v3_lora.py" if job.version in {"v3", "v4"} else "GPT_SoVITS/s2_train.py"
     command = [paths.python_executable, "-s", script, "--config", str(config_path)]
     return run_stage(

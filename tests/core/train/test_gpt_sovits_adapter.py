@@ -203,6 +203,31 @@ def test_run_gpt_stage_writes_yaml_config_and_invokes_s1_script(tmp_path, fake_p
     assert written["data"]["max_sec"] == 54  # preserved from the template
 
 
+def test_run_gpt_stage_creates_half_weights_save_dir_and_output_dir(tmp_path, fake_popen_factory):
+    # Regression test: s1_train.py shutil.move()s checkpoints into this directory
+    # without creating it - confirmed with a real FileNotFoundError on a real run.
+    factory = fake_popen_factory(lines=[], returncode=0)
+    paths = _paths(tmp_path)
+    job = _job(tmp_path)
+    _write_s1_template_file(paths, job.version)
+
+    adapter.run_gpt_stage(paths, job, popen_factory=factory)
+
+    assert (job.experiment_dir / "s1_weights").is_dir()
+    assert (job.experiment_dir / "s1").is_dir()
+
+
+def test_run_sovits_stage_creates_save_weight_dir(tmp_path, fake_popen_factory):
+    factory = fake_popen_factory(lines=[], returncode=0)
+    paths = _paths(tmp_path)
+    job = _job(tmp_path)
+    _write_s2_template_file(paths, job.version)
+
+    adapter.run_sovits_stage(paths, job, popen_factory=factory)
+
+    assert (job.experiment_dir / "s2_weights").is_dir()
+
+
 def test_run_sovits_stage_uses_lora_script_for_v3_and_v4(tmp_path, fake_popen_factory):
     for version in ("v3", "v4"):
         factory = fake_popen_factory(lines=[], returncode=0)
