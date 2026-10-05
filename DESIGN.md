@@ -150,16 +150,19 @@ Revised 2026-10-06: tiers below govern the **GPT/text-to-semantic stage only** �
 5. On completion: persist the fine-tuned GPT checkpoint + training metadata, transition project to `trained`, then immediately run the quality-signal check (§8.3 step 8) so the user gets a similarity/naturalness read without needing to generate anything manually first. The quality signal necessarily reflects a fine-tuned GPT stage + a zero-shot (pretrained) SoVITS stage together, since that's the real inference-time pairing (§3 Training scope).
 
 ### 8.3 Inference / generation
-1. Load the project's trained checkpoint (cached in memory across requests).
-2. Normalize target text (numbers, abbreviations, punctuation).
-3. Split into sentence-level chunks respecting the model's max input length.
-4. Synthesize a small number of candidates per chunk at varied sampling seed/temperature.
-5. **Hard gate**: transcribe each candidate with Whisper, compute WER against the input text; discard/heavily penalize candidates above ~20–30% WER (catches garbled/dropped/repeated-word failures that similarity scores alone can miss — RESEARCH.md Finding 4).
-6. **Rank** surviving candidates by a weighted score: SECS (speaker-similarity vs. the reference-embedding centroid, weighted higher) + UTMOS (no-reference naturalness, weighted lower); auto-pick the best per chunk.
-7. Stitch chunks with crossfade/silence-matched joins.
-8. Export WAV (+ optional MP3) to `output/` with generation metadata, including the SECS/UTMOS scores achieved. Tag the exported file's own metadata as AI-generated (near-zero cost, the one watermarking-adjacent step done now — see §3).
 
-**Quality signal** (run once right after training, §8.2 step 5, and re-runnable on demand): synthesize ~5–10 held-out test sentences, average their SECS (vs. reference centroid) and UTMOS, and show the user a directional band ("strong match" / "likely good" / etc.) rather than a raw score — averaging tames the utterance-level noise either metric has on its own (RESEARCH.md Finding 4).
+Implemented in Batch 4 (`core/infer/*`), confirmed 2026-10-06 against the real `TTS_infer_pack.TTS`/`TTS_Config` classes (commit `48b1a01`) rather than guessed, the same way Batch 3's training integration was. Confirmed: `TTS_Config` validates the GPT (`t2s_weights_path`) and SoVITS (`vits_weights_path`) checkpoints completely independently with no cross-check - supplying our fine-tuned GPT checkpoint alongside the original pretrained SoVITS checkpoint (§3 Training scope) is exactly what this library supports natively, not a workaround. `TTS.run()` is a generator (`next(tts_pipeline.run(inputs))`, matching the real `api_v2.py`'s own usage) and already handles arbitrary-length text internally with no hard max - so step 3 below is **not** a model input-length workaround, it's purely so each sentence gets its own gate-and-rank pass rather than one bad sentence poisoning (or being hidden inside) a whole-text generation.
+
+1. Load the project's trained GPT checkpoint + the base pretrained SoVITS checkpoint (never both fine-tuned - §3) via `tts_adapter.load_tts()`.
+2. Normalize target text (numbers via `num2words`, common abbreviations, whitespace).
+3. Split into sentence-level chunks (`chunk_text.py`) for independent per-chunk candidate generation/ranking - see confirmation above.
+4. Synthesize a small number of candidates per chunk at varied sampling seed.
+5. **Hard gate**: transcribe each candidate with Whisper, compute word-level WER against the chunk's own text; reject candidates above 30% WER (catches garbled/dropped/repeated-word failures that similarity scores alone can miss — RESEARCH.md Finding 4). If every candidate for a chunk is rejected, the least-bad one (lowest WER) is used rather than nothing.
+6. **Rank** surviving candidates by a weighted score: SECS via Resemblyzer (speaker-similarity vs. the reference-embedding centroid, weighted 0.7) + UTMOS via `utmos-pytorch` (no-reference naturalness, weighted 0.3 - the original `utmos` PyPI package's fairseq dependency is a known problematic install, avoided); auto-pick the best per chunk.
+7. Stitch chunks with a linear crossfade at each join (`stitch.py`).
+8. Export WAV (+ optional MP3) to `output/` with generation metadata, including the SECS/UTMOS scores achieved (`export.py`). Tag the exported file's own metadata as AI-generated (near-zero cost, the one watermarking-adjacent step done now — see §3).
+
+**Quality signal** (`core/infer/quality_signal.py`; run once right after training, §8.2 step 5, and re-runnable on demand): synthesize 5 fixed held-out test sentences with exactly **one** candidate each (no best-of-N search - the point is measuring the model honestly, not cherry-picking), average their SECS and UTMOS, and show the user a directional band ("strong match" ≥0.75 SECS / "likely good" ≥0.55 / "uncertain" below - placeholder thresholds pending real calibration data, not research-backed) rather than a raw score — averaging tames the utterance-level noise either metric has on its own (RESEARCH.md Finding 4).
 
 ## 9. GUI design & launch modes
 

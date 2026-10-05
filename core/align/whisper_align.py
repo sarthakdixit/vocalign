@@ -57,13 +57,13 @@ def is_low_confidence(segment: WhisperSegment) -> bool:
 
 
 def compare_to_reference(segments: list[WhisperSegment], reference_text: str) -> MatchReport:
-    asr_text = _normalize_text(" ".join(segment.text for segment in segments))
-    reference = _normalize_text(reference_text)
+    asr_text = normalize_for_comparison(" ".join(segment.text for segment in segments))
+    reference = normalize_for_comparison(reference_text)
     ratio = difflib.SequenceMatcher(a=asr_text, b=reference).ratio() if reference else 0.0
     return MatchReport(similarity_ratio=ratio, asr_text=asr_text, reference_text=reference)
 
 
-def _normalize_text(text: str) -> str:
+def normalize_for_comparison(text: str) -> str:
     lowered = text.lower()
     stripped = re.sub(r"[^\w\s]", "", lowered)
     return re.sub(r"\s+", " ", stripped).strip()
