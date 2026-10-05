@@ -65,6 +65,12 @@ fi
 echo "[setup_env] Installing clone-voice in editable mode"
 "$PYTHON_BIN" -m pip install -e "$REPO_ROOT"
 
+if ! command -v ffmpeg >/dev/null 2>&1; then
+    echo "[setup_env] WARNING: ffmpeg not found on PATH. core/audio/io.py shells out to it"
+    echo "[setup_env]          to transcode input audio - install it (e.g. 'sudo apt install ffmpeg')"
+    echo "[setup_env]          before running anything that loads real audio."
+fi
+
 echo ""
 if [ "$USING_ACTIVE_ENV" = true ]; then
     echo "[setup_env] Done. Your active environment now has everything installed. Next steps:"
