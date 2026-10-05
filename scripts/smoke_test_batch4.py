@@ -29,7 +29,7 @@ from core.infer.ranking import default_secs_fn, default_utmos_fn  # noqa: E402
 from core.infer.similarity import compute_embedding, reference_centroid  # noqa: E402
 from core.infer.tts_adapter import TtsCheckpoints, load_tts  # noqa: E402
 from core.train.data_prep import default_bert_dir, default_cnhubert_dir  # noqa: E402
-from core.train.gpt_sovits_adapter import default_paths  # noqa: E402
+from core.train.gpt_sovits_adapter import default_paths, ensure_on_sys_path  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -69,6 +69,7 @@ def main() -> int:
 
     print("[smoke_test] 2/5 Loading TTS pipeline (fine-tuned GPT + base pretrained SoVITS)")
     paths = default_paths(args.vendor_dir, sys.executable, args.version)
+    ensure_on_sys_path(paths)
     checkpoints = TtsCheckpoints(
         version=args.version,
         t2s_weights_path=checkpoint_path,

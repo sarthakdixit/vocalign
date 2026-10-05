@@ -28,6 +28,7 @@ import copy
 import json
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -119,6 +120,20 @@ def build_env(paths: GptSoVitsPaths, extra: dict | None = None) -> dict:
     if extra:
         merged.update(extra)
     return merged
+
+
+def ensure_on_sys_path(paths: GptSoVitsPaths) -> None:
+    """Prepends the vendored repo root and GPT_SoVITS/ itself to sys.path - the same
+    two entries build_env() puts on PYTHONPATH, needed for the same reason (GPT_SoVITS's
+    own internal cross-references, e.g. text.cleaner/tools.my_utils, confirmed in
+    build_env()'s docstring). Training only ever launches GPT-SoVITS as a subprocess, so
+    build_env()'s PYTHONPATH is what reaches it there; a direct in-process `from
+    GPT_SoVITS... import ...` (inference, Batch 4) needs this instead, since setting
+    PYTHONPATH on an already-running process has no effect on that process's own
+    sys.path - confirmed the hard way with a real ModuleNotFoundError on a real run."""
+    for entry in (str(paths.repo_root), str(paths.repo_root / "GPT_SoVITS")):
+        if entry not in sys.path:
+            sys.path.insert(0, entry)
 
 
 @dataclass(frozen=True)

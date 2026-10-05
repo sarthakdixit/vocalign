@@ -224,6 +224,29 @@ def test_build_env_merges_extra_vars_without_overwriting_pythonpath(tmp_path, mo
     assert "PYTHONPATH" in env
 
 
+# --- ensure_on_sys_path (sys.path for an in-process `from GPT_SoVITS import ...`,
+# as opposed to build_env()'s PYTHONPATH for a subprocess - see its docstring) ---
+
+
+def test_ensure_on_sys_path_adds_repo_root_and_gpt_sovits_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(adapter.sys, "path", [])
+    paths = _paths(tmp_path)
+
+    adapter.ensure_on_sys_path(paths)
+
+    assert str(paths.repo_root) in adapter.sys.path
+    assert str(paths.repo_root / "GPT_SoVITS") in adapter.sys.path
+
+
+def test_ensure_on_sys_path_does_not_duplicate_entries_already_present(tmp_path, monkeypatch):
+    paths = _paths(tmp_path)
+    monkeypatch.setattr(adapter.sys, "path", [str(paths.repo_root)])
+
+    adapter.ensure_on_sys_path(paths)
+
+    assert adapter.sys.path.count(str(paths.repo_root)) == 1
+
+
 # --- template path/loading helpers ---
 
 
