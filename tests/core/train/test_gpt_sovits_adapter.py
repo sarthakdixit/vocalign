@@ -331,6 +331,55 @@ def test_run_sovits_stage_creates_save_weight_dir(tmp_path, fake_popen_factory):
     assert (job.experiment_dir / "s2_weights").is_dir()
 
 
+def test_run_gpt_stage_retries_clearing_checkpoint_dir_on_transient_oserror(
+    tmp_path, fake_popen_factory, monkeypatch
+):
+    # Confirmed the hard way on a real run: a mounted/external filesystem reported
+    # "Directory not empty" mid-rmtree (sync lag, not a real conflict). Retrying
+    # should recover rather than letting a transient hiccup fail the whole run.
+    factory = fake_popen_factory(lines=[], returncode=0)
+    paths = _paths(tmp_path)
+    job = _job(tmp_path)
+    _write_s1_template_file(paths, job.version)
+    (job.experiment_dir / "s1").mkdir(parents=True)
+
+    real_rmtree = adapter.shutil.rmtree
+    calls = {"n": 0}
+
+    def flaky_rmtree(path, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError(39, "Directory not empty")
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(adapter.shutil, "rmtree", flaky_rmtree)
+    monkeypatch.setattr(adapter.time, "sleep", lambda _seconds: None)
+
+    adapter.run_gpt_stage(paths, job, popen_factory=factory)
+
+    assert calls["n"] == 2
+    assert (job.experiment_dir / "s1").is_dir()
+
+
+def test_run_gpt_stage_reraises_if_clearing_checkpoint_dir_keeps_failing(
+    tmp_path, fake_popen_factory, monkeypatch
+):
+    factory = fake_popen_factory(lines=[], returncode=0)
+    paths = _paths(tmp_path)
+    job = _job(tmp_path)
+    _write_s1_template_file(paths, job.version)
+    (job.experiment_dir / "s1").mkdir(parents=True)
+
+    def always_fails(path, *args, **kwargs):
+        raise OSError(39, "Directory not empty")
+
+    monkeypatch.setattr(adapter.shutil, "rmtree", always_fails)
+    monkeypatch.setattr(adapter.time, "sleep", lambda _seconds: None)
+
+    with pytest.raises(OSError):
+        adapter.run_gpt_stage(paths, job, popen_factory=factory)
+
+
 def test_run_sovits_stage_sets_expandable_segments_alloc_conf(tmp_path, fake_popen_factory):
     # Suggested directly by a real CUDA OOM's own error message (fragmentation, not
     # just raw usage) - cheap to try given how tight this stage's VRAM budget is.

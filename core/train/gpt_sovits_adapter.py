@@ -15,6 +15,7 @@ import copy
 import json
 import os
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -205,6 +206,21 @@ def build_s2_config(paths: GptSoVitsPaths, job: FineTuneJob, template: dict | No
     return config
 
 
+def _clear_dir(path: Path, retries: int = 3, delay_seconds: float = 0.2) -> None:
+    """Some filesystems (confirmed on a real run: a mounted/external drive under
+    /media/...) can transiently report a directory as non-empty mid-rmtree, because a
+    deletion is still settling when rmtree's final check runs - not a real conflict,
+    just sync lag. Retrying briefly is more robust than failing outright on it."""
+    for attempt in range(retries):
+        try:
+            shutil.rmtree(path)
+            return
+        except OSError:
+            if attempt == retries - 1:
+                raise
+            time.sleep(delay_seconds)
+
+
 def run_gpt_stage(
     paths: GptSoVitsPaths, job: FineTuneJob, *, on_progress=None, popen_factory=None, cancel_check=None
 ) -> RunResult:
@@ -219,7 +235,7 @@ def run_gpt_stage(
     # Starting clean each run also matches our own semantics better regardless - a training
     # run should reflect current data/settings, not silently continue stale prior state.
     if output_dir.exists():
-        shutil.rmtree(output_dir)
+        _clear_dir(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     config_path = job.experiment_dir / "s1_config.yaml"
     write_yaml_config(config, config_path)
