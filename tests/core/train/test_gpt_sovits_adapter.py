@@ -217,6 +217,24 @@ def test_run_gpt_stage_creates_half_weights_save_dir_and_output_dir(tmp_path, fa
     assert (job.experiment_dir / "s1").is_dir()
 
 
+def test_run_gpt_stage_clears_stale_checkpoint_dir_before_starting(tmp_path, fake_popen_factory):
+    # pytorch_lightning auto-resumes from any checkpoint already in output_dir, which
+    # is incompatible with PyTorch 2.6+'s weights_only=True default on torch.load -
+    # confirmed with a real UnpicklingError on a real run. Each run should start fresh.
+    factory = fake_popen_factory(lines=[], returncode=0)
+    paths = _paths(tmp_path)
+    job = _job(tmp_path)
+    _write_s1_template_file(paths, job.version)
+    stale_ckpt_dir = job.experiment_dir / "s1" / "ckpt"
+    stale_ckpt_dir.mkdir(parents=True)
+    (stale_ckpt_dir / "epoch=1-step=46.ckpt").write_bytes(b"stale")
+
+    adapter.run_gpt_stage(paths, job, popen_factory=factory)
+
+    assert not (stale_ckpt_dir / "epoch=1-step=46.ckpt").exists()
+    assert (job.experiment_dir / "s1").is_dir()
+
+
 def test_run_sovits_stage_creates_save_weight_dir(tmp_path, fake_popen_factory):
     factory = fake_popen_factory(lines=[], returncode=0)
     paths = _paths(tmp_path)

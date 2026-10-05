@@ -13,6 +13,7 @@ real-hardware run (a hand-built config was missing the real acoustic hyperparame
 
 import copy
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -169,7 +170,15 @@ def run_gpt_stage(
     # s1_train.py shutil.move()s checkpoints into half_weights_save_dir without ever
     # creating it itself - confirmed the hard way on a real run (FileNotFoundError).
     Path(config["train"]["half_weights_save_dir"]).mkdir(parents=True, exist_ok=True)
-    Path(config["output_dir"]).mkdir(parents=True, exist_ok=True)
+    output_dir = Path(config["output_dir"])
+    # Always start fresh: pytorch_lightning auto-resumes from any checkpoint already
+    # in this dir, and that resume path is broken against PyTorch 2.6+'s weights_only=True
+    # default (confirmed: UnpicklingError on a real run, pathlib.PosixPath not allowlisted).
+    # Starting clean each run also matches our own semantics better regardless - a training
+    # run should reflect current data/settings, not silently continue stale prior state.
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     config_path = job.experiment_dir / "s1_config.yaml"
     write_yaml_config(config, config_path)
     command = [paths.python_executable, "-s", "GPT_SoVITS/s1_train.py", "--config_file", str(config_path)]
