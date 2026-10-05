@@ -83,6 +83,18 @@ def test_format_generation_result_failure_shows_error():
     assert formatting.format_generation_result(outcome) == "Generation failed: checkpoint missing"
 
 
+def test_format_generation_result_failure_includes_progress_log_tail():
+    outcome = SimpleNamespace(
+        ok=False, error="CUDA out of memory",
+        progress_log=("Synthesizing chunk 1/25: 'Hello.'", "Synthesizing chunk 2/25: 'World.'"),
+    )
+
+    text = formatting.format_generation_result(outcome)
+
+    assert "CUDA out of memory" in text
+    assert "Synthesizing chunk 2/25" in text
+
+
 def test_format_generation_result_success_includes_scores():
     outcome = SimpleNamespace(ok=True, secs_score=0.78, utmos_score=4.16, low_confidence=False)
 

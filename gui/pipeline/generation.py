@@ -12,6 +12,7 @@ construction (_build_inference_context) are split apart specifically so the cach
 behavior is testable with a trivial fake builder, without needing real models.
 """
 
+import dataclasses
 import json
 import sys
 import time
@@ -31,6 +32,7 @@ class GenerationOutcome:
     utmos_score: float | None = None
     low_confidence: bool = False
     error: str | None = None
+    progress_log: tuple[str, ...] = ()
 
 
 @dataclass
@@ -120,11 +122,21 @@ def run_generation(
     projects_root, project_id: str, target_text: str, *,
     on_progress=None, load_context_fn=None, whisper_model=None,
 ) -> GenerationOutcome:
+    # Always captured, regardless of whether the caller also passed its own
+    # on_progress - this is what lets a *failure* (e.g. a real OOM partway through a
+    # long, multi-chunk text) report exactly how far it got, not just the final error.
+    progress_log: list[str] = []
+
+    def _record(message: str) -> None:
+        progress_log.append(message)
+        if on_progress is not None:
+            on_progress(message)
+
     load_context_fn = load_context_fn or load_inference_context
     try:
         context = load_context_fn(projects_root, project_id)
     except Exception as exc:
-        return GenerationOutcome(ok=False, error=str(exc))
+        return GenerationOutcome(ok=False, error=str(exc), progress_log=tuple(progress_log))
 
     layout = storage.ensure_project_layout(projects_root, project_id)
     # monotonic_ns(), not time.time(): millisecond resolution can collide between two
@@ -143,12 +155,13 @@ def run_generation(
             secs_fn=context.secs_fn,
             utmos_fn=context.utmos_fn,
             whisper_model=whisper_model,
-            on_progress=on_progress or (lambda message: None),
+            on_progress=_record,
         )
     except Exception as exc:
-        return GenerationOutcome(ok=False, error=str(exc))
+        return GenerationOutcome(ok=False, error=str(exc), progress_log=tuple(progress_log))
 
-    return _outcome_from_metadata_file(metadata_path)
+    outcome = _outcome_from_metadata_file(metadata_path)
+    return dataclasses.replace(outcome, progress_log=tuple(progress_log))
 
 
 def list_generation_history(projects_root, project_id: str) -> list[GenerationOutcome]:

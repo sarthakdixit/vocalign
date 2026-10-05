@@ -120,6 +120,34 @@ def test_run_generation_returns_failure_outcome_when_context_loading_fails(tmp_p
     assert "checkpoint missing" in outcome.error
 
 
+def test_run_generation_captures_progress_log_up_to_a_mid_generation_failure(tmp_path):
+    class _FailsOnSecondCallTts:
+        def __init__(self):
+            self.call_count = 0
+
+        def run(self, inputs):
+            self.call_count += 1
+            if self.call_count > 3:  # 3 candidates for chunk 1 succeed, chunk 2 fails
+                raise RuntimeError("CUDA out of memory")
+            yield 16000, np.zeros(10, dtype=np.float32)
+
+    prompt = SimpleNamespace(audio_path=Path("/abs/ref.wav"), text="hello there")
+    context = generation._ProjectInferenceContext(
+        project_id="p1", tts_instance=_FailsOnSecondCallTts(), prompt=prompt,
+        secs_fn=lambda candidate: 0.8, utmos_fn=lambda candidate: 4.0,
+    )
+
+    outcome = generation.run_generation(
+        tmp_path, "p1", "First sentence here. Second sentence here.",
+        load_context_fn=lambda root, pid: context, whisper_model=_FakeWhisperModel(),
+    )
+
+    assert outcome.ok is False
+    assert "CUDA out of memory" in outcome.error
+    assert any("chunk 1/2" in line for line in outcome.progress_log)
+    assert any("chunk 2/2" in line for line in outcome.progress_log)
+
+
 def test_run_generation_returns_failure_outcome_when_generation_itself_raises(tmp_path):
     outcome = generation.run_generation(
         tmp_path, "p1", "   ",  # blank text -> generate() raises ValueError after normalization

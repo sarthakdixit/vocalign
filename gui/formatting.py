@@ -50,7 +50,12 @@ def format_quality_band(quality_band_dict: dict | None) -> str:
 
 def format_generation_result(outcome) -> str:
     if not outcome.ok:
-        return f"Generation failed: {outcome.error}"
+        message = f"Generation failed: {outcome.error}"
+        progress_log = getattr(outcome, "progress_log", ())
+        if progress_log:
+            tail = "\n".join(progress_log[-10:])
+            message += f"\n\nLast progress before the failure:\n{tail}"
+        return message
     parts = []
     if outcome.secs_score is not None:
         parts.append(f"SECS={outcome.secs_score:.2f}")
