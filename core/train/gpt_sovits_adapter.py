@@ -24,6 +24,7 @@ inference time (Batch 4): `pretrained_s2_g`/`pretrained_s2_d` point at the base
 checkpoint, only `pretrained_s1` points at our fine-tuned one.
 """
 
+import contextlib
 import copy
 import json
 import os
@@ -134,6 +135,28 @@ def ensure_on_sys_path(paths: GptSoVitsPaths) -> None:
     for entry in (str(paths.repo_root), str(paths.repo_root / "GPT_SoVITS")):
         if entry not in sys.path:
             sys.path.insert(0, entry)
+
+
+@contextlib.contextmanager
+def chdir_to_repo_root(paths: GptSoVitsPaths):
+    """GPT-SoVITS's own `sv.py` (confirmed at the pinned commit) does
+    `sys.path.append(f"{os.getcwd()}/GPT_SoVITS/eres2net")` instead of a proper
+    relative import - it only resolves correctly when the process's CWD is already
+    the repo root, exactly how its own `api_v2.py` is meant to be launched (`python
+    api_v2.py` run from the repo root - confirmed its own sys.path setup adds nothing
+    beyond what ensure_on_sys_path() above already does, so it leans entirely on CWD
+    for this). A direct in-process import (inference, Batch 4) doesn't get a
+    subprocess's `cwd=` for free the way training's subprocess calls do, so this
+    temporarily switches into the vendored repo root around the caller's load, then
+    restores the original CWD regardless of success or failure. Confirmed necessary
+    the hard way: ensure_on_sys_path() alone wasn't enough - a real ModuleNotFoundError
+    for ERes2NetV2 surfaced two import-layers deep inside TTS_infer_pack's own chain."""
+    original = os.getcwd()
+    os.chdir(paths.repo_root)
+    try:
+        yield
+    finally:
+        os.chdir(original)
 
 
 @dataclass(frozen=True)

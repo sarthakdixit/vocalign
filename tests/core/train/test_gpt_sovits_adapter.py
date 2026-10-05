@@ -247,6 +247,44 @@ def test_ensure_on_sys_path_does_not_duplicate_entries_already_present(tmp_path,
     assert adapter.sys.path.count(str(paths.repo_root)) == 1
 
 
+# --- chdir_to_repo_root (CWD for GPT-SoVITS's own os.getcwd()-relative sys.path
+# trick in sv.py - confirmed at the pinned commit; see the function's docstring) ---
+
+
+def test_chdir_to_repo_root_changes_cwd_inside_the_with_block(tmp_path):
+    paths = _paths(tmp_path)
+    paths.repo_root.mkdir(parents=True)
+    seen = {}
+
+    with adapter.chdir_to_repo_root(paths):
+        seen["inside"] = os.getcwd()
+
+    assert seen["inside"] == str(paths.repo_root)
+
+
+def test_chdir_to_repo_root_restores_original_cwd_after_the_with_block(tmp_path):
+    paths = _paths(tmp_path)
+    paths.repo_root.mkdir(parents=True)
+    original = os.getcwd()
+
+    with adapter.chdir_to_repo_root(paths):
+        pass
+
+    assert os.getcwd() == original
+
+
+def test_chdir_to_repo_root_restores_original_cwd_even_if_the_body_raises(tmp_path):
+    paths = _paths(tmp_path)
+    paths.repo_root.mkdir(parents=True)
+    original = os.getcwd()
+
+    with pytest.raises(ValueError):
+        with adapter.chdir_to_repo_root(paths):
+            raise ValueError("boom")
+
+    assert os.getcwd() == original
+
+
 # --- template path/loading helpers ---
 
 

@@ -29,7 +29,7 @@ from core.infer.ranking import default_secs_fn, default_utmos_fn  # noqa: E402
 from core.infer.similarity import compute_embedding, reference_centroid  # noqa: E402
 from core.infer.tts_adapter import TtsCheckpoints, load_tts  # noqa: E402
 from core.train.data_prep import default_bert_dir, default_cnhubert_dir  # noqa: E402
-from core.train.gpt_sovits_adapter import default_paths, ensure_on_sys_path  # noqa: E402
+from core.train.gpt_sovits_adapter import chdir_to_repo_root, default_paths, ensure_on_sys_path  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -78,7 +78,8 @@ def main() -> int:
         cnhubert_base_path=default_cnhubert_dir(args.vendor_dir),
         device=args.device,
     )
-    tts_instance = load_tts(checkpoints)
+    with chdir_to_repo_root(paths):
+        tts_instance = load_tts(checkpoints)
 
     print("[smoke_test] 3/5 Building reference-speaker embedding for SECS scoring")
     ref_samples, ref_sr = load_and_transcode(args.audio_path, sample_rate=16000)
