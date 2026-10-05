@@ -186,7 +186,7 @@ Work proceeds **one batch at a time**. Each batch = implementation + heavy tests
 
 Batches are sized so each test-and-report cycle stays fast — if a batch turns out too big in practice, it gets split further rather than bundled.
 
-**Progress:** Batch 0 confirmed complete 2026-10-05 (20/20 tests passing, `check_gpu.py` verified against real hardware). Batch 1 confirmed complete 2026-10-05 (58/58 tests passing, including Batch 0's). Batch 2 confirmed complete 2026-10-05 (113/113 tests passing) — also where a `.gitignore` anchoring bug (`projects/`/`models/` matching nested `core/projects/`/`core/models/`, not just the root-level data dirs) was found and fixed; see the dev-workflow memory for the sync-mechanism implication.
+**Progress:** Batch 0 confirmed complete 2026-10-05 (20/20 tests passing, `check_gpu.py` verified against real hardware). Batch 1 confirmed complete 2026-10-05 (58/58 tests passing, including Batch 0's). Batch 2 confirmed complete 2026-10-05 (113/113 tests passing) — also where a `.gitignore` anchoring bug (`projects/`/`models/` matching nested `core/projects/`/`core/models/`, not just the root-level data dirs) was found and fixed; see the dev-workflow memory for the sync-mechanism implication. Batch 3 confirmed complete 2026-10-06 (190/190 tests passing, full real smoke test clean end-to-end) — the riskiest batch, as flagged; see §3 "Training scope" and §13 for the real-hardware investigation that settled it: GPT stage fine-tunes locally, SoVITS stage stays zero-shot at its pretrained checkpoint.
 
 ## 11. Testing strategy
 
