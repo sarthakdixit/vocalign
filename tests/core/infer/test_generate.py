@@ -66,6 +66,28 @@ def test_generate_full_pipeline_picks_highest_scoring_candidate_per_chunk():
     assert result.any_low_confidence is False
 
 
+def test_generate_reports_per_chunk_wer_and_rejection_status_via_on_progress():
+    # Confirmed worth having via a real run: without this, a "low confidence" result
+    # gives no way to tell which chunk failed or why, short of guessing at the text.
+    chunk_text = "Hello there."
+    progress_lines = []
+
+    generate_mod.generate(
+        chunk_text,
+        tts_instance=_CountingFakeTts(),
+        text_lang="en",
+        ref_audio_path=Path("/abs/ref.wav"),
+        prompt_text="ref",
+        prompt_lang="en",
+        whisper_model=_SequentialWhisperModel(["completely unrelated transcription"] * 3),
+        on_progress=progress_lines.append,
+    )
+
+    result_lines = [line for line in progress_lines if line.startswith("Chunk 1/1 result:")]
+    assert len(result_lines) == 1
+    assert "REJECTED" in result_lines[0]
+
+
 def test_generate_stitches_chosen_candidates_into_nonempty_audio():
     whisper = _SequentialWhisperModel(["One."] * 3)
 

@@ -49,12 +49,11 @@ def format_quality_band(quality_band_dict: dict | None) -> str:
 
 
 def format_generation_result(outcome) -> str:
+    progress_log = getattr(outcome, "progress_log", ())
     if not outcome.ok:
         message = f"Generation failed: {outcome.error}"
-        progress_log = getattr(outcome, "progress_log", ())
         if progress_log:
-            tail = "\n".join(progress_log[-10:])
-            message += f"\n\nLast progress before the failure:\n{tail}"
+            message += f"\n\nLast progress before the failure:\n{_progress_tail(progress_log)}"
         return message
     parts = []
     if outcome.secs_score is not None:
@@ -63,4 +62,13 @@ def format_generation_result(outcome) -> str:
         parts.append(f"UTMOS={outcome.utmos_score:.2f}")
     if outcome.low_confidence:
         parts.append("low confidence - WER gate rejected every candidate for at least one chunk")
-    return " · ".join(parts) if parts else "Done."
+    message = " · ".join(parts) if parts else "Done."
+    if outcome.low_confidence and progress_log:
+        rejected_lines = [line for line in progress_log if "REJECTED" in line or line.startswith("Chunk ")]
+        if rejected_lines:
+            message += f"\n\nPer-chunk detail:\n{_progress_tail(rejected_lines, limit=20)}"
+    return message
+
+
+def _progress_tail(progress_log, limit: int = 10) -> str:
+    return "\n".join(progress_log[-limit:])

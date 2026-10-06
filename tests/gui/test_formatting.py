@@ -110,3 +110,32 @@ def test_format_generation_result_flags_low_confidence():
     text = formatting.format_generation_result(outcome)
 
     assert "low confidence" in text
+
+
+def test_format_generation_result_low_confidence_includes_per_chunk_detail():
+    # So a "low confidence" success is diagnosable (which chunk failed, not just that
+    # one did) without needing a hard failure to see the progress log at all.
+    outcome = SimpleNamespace(
+        ok=True, secs_score=0.71, utmos_score=3.98, low_confidence=True,
+        progress_log=(
+            "Synthesizing chunk 1/2: 'Hello there.'",
+            "Chunk 1/2 result: wer=0.00 status=ok",
+            "Synthesizing chunk 2/2: 'Goodbye now.'",
+            "Chunk 2/2 result: wer=1.00 status=REJECTED (every candidate failed the WER gate)",
+        ),
+    )
+
+    text = formatting.format_generation_result(outcome)
+
+    assert "Chunk 2/2 result" in text
+    assert "REJECTED" in text
+
+
+def test_format_generation_result_low_confidence_without_progress_log_omits_detail():
+    # list_generation_history() reconstructs outcomes from metadata JSON, which never
+    # stored progress_log - must not crash or show an empty/garbled detail section.
+    outcome = SimpleNamespace(ok=True, secs_score=0.5, utmos_score=3.0, low_confidence=True, progress_log=())
+
+    text = formatting.format_generation_result(outcome)
+
+    assert "Per-chunk detail" not in text

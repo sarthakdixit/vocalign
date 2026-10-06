@@ -90,7 +90,10 @@ def generate(
                 score_candidate(candidate, chunk, whisper_model=whisper_model, secs_fn=secs_fn, utmos_fn=utmos_fn)
             )
 
-        chunk_results.append(pick_best(scored_candidates))
+        best = pick_best(scored_candidates)
+        chunk_results.append(best)
+        status = "REJECTED (every candidate failed the WER gate)" if best.rejected else "ok"
+        on_progress(f"Chunk {i + 1}/{len(chunks)} result: wer={best.wer:.2f} status={status}")
 
     stitched = stitch([c.candidate.samples for c in chunk_results], sample_rate=sample_rate)
     return GenerationResult(audio=stitched, sample_rate=sample_rate, chunk_results=chunk_results)
