@@ -97,6 +97,7 @@ def run_training(
     run_data_prep_fn=None,
     run_gpt_stage_fn=None,
     quality_signal_fn=None,
+    gpt_epochs_override=None,
 ) -> TrainingOutcome:
     on_progress = on_progress or (lambda line: None)
     cancel_check = cancel_check or (lambda: False)
@@ -106,7 +107,7 @@ def run_training(
         manager.transition_project(projects_root, project_id, ProjectState.TRAINING)
         return _train(
             projects_root, project, on_progress, cancel_check, popen_factory, run_data_prep_fn,
-            run_gpt_stage_fn, quality_signal_fn,
+            run_gpt_stage_fn, quality_signal_fn, gpt_epochs_override,
         )
     except Exception as exc:
         on_progress(f"ERROR: {exc}")
@@ -124,7 +125,7 @@ def _default_run_gpt_stage(paths, job, *, on_progress, cancel_check, popen_facto
 
 def _train(
     projects_root, project, on_progress, cancel_check, popen_factory, run_data_prep_fn, run_gpt_stage_fn,
-    quality_signal_fn,
+    quality_signal_fn, gpt_epochs_override,
 ) -> TrainingOutcome:
     run_data_prep_fn = run_data_prep_fn or _default_run_data_prep
     run_gpt_stage_fn = run_gpt_stage_fn or _default_run_gpt_stage
@@ -132,8 +133,15 @@ def _train(
     layout = storage.ensure_project_layout(projects_root, project.id)
     total_speech_seconds = project.config.get("total_speech_seconds", 0.0)
     recipe = select_recipe(total_speech_seconds)
+    # A per-run experiment, not a permanent change to the recipe's own default: the
+    # right epoch count for a given project/data size is genuinely unknown (recipe.py's
+    # own counts are explicitly placeholders), and more epochs on the same data could
+    # help generalization or just as easily overfit - this lets a specific run be
+    # tried without committing every future project at this tier to the same value.
+    gpt_epochs = gpt_epochs_override if gpt_epochs_override is not None else recipe.gpt_epochs
+    override_note = f" (overridden from {recipe.gpt_epochs})" if gpt_epochs_override is not None else ""
     on_progress(
-        f"Recipe: tier={recipe.tier} attempt_training={recipe.attempt_training} gpt_epochs={recipe.gpt_epochs}"
+        f"Recipe: tier={recipe.tier} attempt_training={recipe.attempt_training} gpt_epochs={gpt_epochs}{override_note}"
     )
 
     if not recipe.attempt_training:
@@ -164,7 +172,7 @@ def _train(
 
     job = FineTuneJob(
         dataset_list_path=dataset_list_path, experiment_dir=layout["training"], version=version,
-        gpt_epochs=recipe.gpt_epochs,
+        gpt_epochs=gpt_epochs,
     )
     on_progress("Fine-tuning the GPT stage...")
     stage1 = run_gpt_stage_fn(

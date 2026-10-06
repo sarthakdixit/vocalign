@@ -65,6 +65,66 @@ def test_run_training_full_success_path(tmp_path):
     assert updated.config["quality_band"]["label"] == "strong match"
 
 
+def test_run_training_uses_recipe_default_epochs_when_no_override_given(tmp_path):
+    projects_root = tmp_path / "projects"
+    project = _preprocessed_project(projects_root, total_speech_seconds=50.0)  # "minimal" tier -> 4 epochs
+    _write_checkpoint(projects_root, project.id)
+    seen_jobs = []
+
+    def _spying_gpt_stage(paths, job, **kwargs):
+        seen_jobs.append(job)
+        return _completed()
+
+    training.run_training(
+        projects_root, project.id,
+        run_data_prep_fn=lambda *a, **k: [_completed()],
+        run_gpt_stage_fn=_spying_gpt_stage,
+    )
+
+    assert seen_jobs[0].gpt_epochs == 4
+
+
+def test_run_training_gpt_epochs_override_takes_precedence_over_the_recipe(tmp_path):
+    projects_root = tmp_path / "projects"
+    project = _preprocessed_project(projects_root, total_speech_seconds=50.0)  # "minimal" tier -> 4 epochs
+    _write_checkpoint(projects_root, project.id)
+    seen_jobs = []
+
+    def _spying_gpt_stage(paths, job, **kwargs):
+        seen_jobs.append(job)
+        return _completed()
+
+    outcome = training.run_training(
+        projects_root, project.id,
+        run_data_prep_fn=lambda *a, **k: [_completed()],
+        run_gpt_stage_fn=_spying_gpt_stage,
+        gpt_epochs_override=40,
+    )
+
+    assert seen_jobs[0].gpt_epochs == 40
+    assert outcome.ok is True
+
+
+def test_run_training_reports_the_override_in_progress_output(tmp_path):
+    projects_root = tmp_path / "projects"
+    project = _preprocessed_project(projects_root, total_speech_seconds=50.0)
+    _write_checkpoint(projects_root, project.id)
+    seen = []
+
+    training.run_training(
+        projects_root, project.id,
+        run_data_prep_fn=lambda *a, **k: [_completed()],
+        run_gpt_stage_fn=lambda *a, **k: _completed(),
+        gpt_epochs_override=40,
+        on_progress=seen.append,
+    )
+
+    recipe_lines = [line for line in seen if line.startswith("Recipe:")]
+    assert len(recipe_lines) == 1
+    assert "gpt_epochs=40" in recipe_lines[0]
+    assert "overridden from 4" in recipe_lines[0]
+
+
 def test_run_training_survives_a_quality_signal_failure(tmp_path):
     # Confirmed via a real CUDA OOM on a real run: the checkpoint is already valid by
     # the time the quality signal runs, so a failure there (e.g. loading a model a

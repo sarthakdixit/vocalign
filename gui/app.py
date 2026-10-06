@@ -119,12 +119,15 @@ def build_app(projects_root=None) -> gr.Blocks:
 
         # --- Project Detail wiring ---
 
-        def on_start_training(project_id):
+        def on_start_training(project_id, epochs_override):
             if not project_id:
                 yield "No project selected - open one from the Dashboard tab first.", None, gr.update()
                 return
 
-            session = training.TrainingSession(projects_root, project_id).start()
+            override = int(epochs_override) if epochs_override else None
+            session = training.TrainingSession(
+                projects_root, project_id, gpt_epochs_override=override
+            ).start()
             log_lines: list[str] = []
             while not session.done:
                 log_lines.extend(session.drain_log())
@@ -145,7 +148,7 @@ def build_app(projects_root=None) -> gr.Blocks:
             yield "\n".join(log_lines), session, quality_text
 
         detail["start_btn"].click(
-            on_start_training, inputs=[current_project_id],
+            on_start_training, inputs=[current_project_id, detail["epochs_override"]],
             outputs=[detail["log"], training_session_state, detail["quality"]],
         )
 
@@ -228,6 +231,12 @@ def _build_new_project_tab() -> dict:
 
 def _build_project_detail_tab() -> dict:
     summary = gr.Markdown("No project selected - open one from the Dashboard tab.")
+    epochs_override = gr.Number(
+        label="GPT epochs override (optional)",
+        info="Leave blank to use the recipe tier's default. Overrides for this run only - "
+        "does not change the default for future projects.",
+        precision=0, minimum=1, value=None,
+    )
     with gr.Row():
         start_btn = gr.Button("Start Training", variant="primary")
         cancel_btn = gr.Button("Cancel")
@@ -235,8 +244,8 @@ def _build_project_detail_tab() -> dict:
     log = gr.Textbox(label="Training log", lines=15, interactive=False)
     quality = gr.Markdown()
     return {
-        "summary": summary, "start_btn": start_btn, "cancel_btn": cancel_btn, "refresh_btn": refresh_btn,
-        "log": log, "quality": quality,
+        "summary": summary, "epochs_override": epochs_override, "start_btn": start_btn,
+        "cancel_btn": cancel_btn, "refresh_btn": refresh_btn, "log": log, "quality": quality,
     }
 
 
