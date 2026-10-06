@@ -36,8 +36,10 @@ class _CountingFakeTts:
 
 
 def test_generate_full_pipeline_picks_highest_scoring_candidate_per_chunk():
-    chunk0_text = "Hello there."
-    chunk1_text = "Goodbye now."
+    # Each sentence needs >= MIN_CHUNK_WORDS (3) words, or short-chunk merging
+    # (chunk_text.py) would fold these two into a single chunk instead of two.
+    chunk0_text = "Hello there friend."
+    chunk1_text = "Goodbye now friend."
     fake_tts = _CountingFakeTts(sr=16000)
     whisper = _SequentialWhisperModel([chunk0_text, chunk0_text, chunk1_text, chunk1_text])
     secs_calls = []
